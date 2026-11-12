@@ -1,0 +1,183 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
+             data.monthlySalary is int && data.monthlySalary >= 0 && data.monthlySalary <= 10000000000 &&
+             data.currency is string && data.currency.size() >= 2 && data.currency.size() <= 10 &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 120)) &&
+             (!('customCategories' in data) || (data.customCategories is list && data.customCategories.size() <= 50));
+    }
+
+    function isValidMonthlyBudget(data) {
+      return data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
+             data.monthKey is string && data.monthKey.size() >= 7 && data.monthKey.size() <= 10 &&
+             data.salary is int && data.salary >= 0 && data.salary <= 10000000000;
+    }
+
+    function isValidBudgetItem(data) {
+      return data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
+             data.monthKey is string && data.monthKey.size() >= 7 && data.monthKey.size() <= 10 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 120 &&
+             data.amount is int && data.amount >= 0 && data.amount <= 10000000000 &&
+             data.category is string && data.category.size() > 0 && data.category.size() <= 60 &&
+             data.isPaid is bool &&
+             (!('isRecurring' in data) || data.isRecurring is bool) &&
+             (!('paidAt' in data) || data.paidAt == null || (data.paidAt is timestamp && data.paidAt <= request.time)) &&
+             (!('notes' in data) || data.notes == null || (data.notes is string && data.notes.size() <= 500));
+    }
+
+    function isValidTemplateItem(data) {
+      return data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 120 &&
+             data.amount is int && data.amount >= 0 && data.amount <= 10000000000 &&
+             (!('isRecurring' in data) || data.isRecurring is bool) &&
+             data.category is string && data.category.size() > 0 && data.category.size() <= 60;
+    }
+
+    function isValidChatMessage(data) {
+      return data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
+             data.role is string && (data.role == 'user' || data.role == 'model') &&
+             data.text is string && data.text.size() > 0 && data.text.size() <= 10000;
+    }
+
+    // User Profile
+    match /users/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+                       request.auth.uid == userId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['userId', 'monthlySalary', 'currency', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'monthlySalary', 'currency', 'displayName', 'customCategories', 'createdAt', 'updatedAt']) &&
+                       incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       isValidUserProfile(incoming());
+
+      allow update: if isSignedIn() &&
+                       request.auth.uid == userId &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['monthlySalary', 'currency', 'displayName', 'customCategories', 'updatedAt']);
+
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+
+      // Monthly Budgets
+      match /months/{monthKey} {
+        allow get, list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().monthKey == monthKey &&
+                         incoming().keys().hasAll(['userId', 'monthKey', 'salary', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'monthKey', 'salary', 'createdAt', 'updatedAt']) &&
+                         incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                         incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                         isValidMonthlyBudget(incoming());
+
+        allow update: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         incoming().userId == existing().userId &&
+                         incoming().monthKey == existing().monthKey &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                         isValidMonthlyBudget(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['salary', 'updatedAt']);
+
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+
+        // Items within each month
+        match /items/{itemId} {
+          allow get, list: if isSignedIn() && request.auth.uid == userId;
+
+          allow create: if isSignedIn() &&
+                           request.auth.uid == userId &&
+                           incoming().userId == request.auth.uid &&
+                           incoming().monthKey == monthKey &&
+                           incoming().keys().hasAll(['userId', 'monthKey', 'name', 'amount', 'category', 'isPaid', 'createdAt', 'updatedAt']) &&
+                           incoming().keys().hasOnly(['userId', 'monthKey', 'name', 'amount', 'category', 'isPaid', 'paidAt', 'isRecurring', 'notes', 'createdAt', 'updatedAt']) &&
+                           incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                           incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                           isValidBudgetItem(incoming());
+
+          allow update: if isSignedIn() &&
+                           request.auth.uid == userId &&
+                           incoming().userId == existing().userId &&
+                           incoming().monthKey == existing().monthKey &&
+                           incoming().createdAt == existing().createdAt &&
+                           incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                           isValidBudgetItem(incoming()) &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['name', 'amount', 'category', 'isPaid', 'paidAt', 'isRecurring', 'notes', 'updatedAt']);
+
+          allow delete: if isSignedIn() && request.auth.uid == userId;
+        }
+      }
+
+      // Master Template Items
+      match /templateItems/{itemId} {
+        allow get, list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll(['userId', 'name', 'amount', 'category', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'name', 'amount', 'category', 'isRecurring', 'createdAt', 'updatedAt']) &&
+                         incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                         incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                         isValidTemplateItem(incoming());
+
+        allow update: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                         isValidTemplateItem(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'amount', 'category', 'isRecurring', 'updatedAt']);
+
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
+
+      // Chat Messages
+      match /chatMessages/{messageId} {
+        allow get, list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll(['userId', 'role', 'text', 'createdAt']) &&
+                         incoming().keys().hasOnly(['userId', 'role', 'text', 'createdAt']) &&
+                         incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                         isValidChatMessage(incoming());
+
+        allow update: if false;
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
+    }
+  }
+}

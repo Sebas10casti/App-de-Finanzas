@@ -1,0 +1,6 @@
+{
+  "name": "Mi Presupuesto",
+  "description": "Gestión de presupuesto mensual, control de pagos ítem a ítem y asesor financiero inteligente con Gemini AI",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

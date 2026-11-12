@@ -1,0 +1,100 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with salary and financial preferences",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "monthlySalary": { "type": "integer", "description": "Monthly net salary in COP" },
+        "currency": { "type": "string", "description": "Currency code like COP" },
+        "displayName": { "type": "string", "description": "User display name" },
+        "customCategories": { "type": "array", "items": { "type": "string" }, "description": "Custom user categories" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp via serverTimestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp via serverTimestamp" }
+      },
+      "required": ["userId", "monthlySalary", "currency", "createdAt", "updatedAt"]
+    },
+    "MonthlyBudget": {
+      "title": "MonthlyBudget",
+      "description": "Monthly budget overview and summary",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "monthKey": { "type": "string", "description": "Month in YYYY-MM format" },
+        "salary": { "type": "integer", "description": "Salary allocated for this month" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp via serverTimestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp via serverTimestamp" }
+      },
+      "required": ["userId", "monthKey", "salary", "createdAt", "updatedAt"]
+    },
+    "BudgetItem": {
+      "title": "BudgetItem",
+      "description": "Individual budget expense item with check-off status",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "monthKey": { "type": "string", "description": "Month in YYYY-MM format" },
+        "name": { "type": "string", "description": "Item name" },
+        "amount": { "type": "integer", "description": "Amount in COP" },
+        "category": { "type": "string", "description": "Budget category" },
+        "isPaid": { "type": "boolean", "description": "Whether this item has been paid this month" },
+        "isRecurring": { "type": "boolean", "description": "Whether this item repeats monthly or is one-time" },
+        "paidAt": { "type": "string", "format": "date-time", "description": "Optional timestamp when paid" },
+        "notes": { "type": "string", "description": "Optional notes" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp via serverTimestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp via serverTimestamp" }
+      },
+      "required": ["userId", "monthKey", "name", "amount", "category", "isPaid", "createdAt", "updatedAt"]
+    },
+    "TemplateItem": {
+      "title": "TemplateItem",
+      "description": "Default template item copied to new months",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "name": { "type": "string", "description": "Item name" },
+        "amount": { "type": "integer", "description": "Amount in COP" },
+        "category": { "type": "string", "description": "Budget category" },
+        "isRecurring": { "type": "boolean", "description": "Whether this item is recurring" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp via serverTimestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp via serverTimestamp" }
+      },
+      "required": ["userId", "name", "amount", "category", "createdAt", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Financial advisor chat message",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "role": { "type": "string", "enum": ["user", "model"], "description": "Message sender role" },
+        "text": { "type": "string", "description": "Message text content" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp via serverTimestamp" }
+      },
+      "required": ["userId", "role", "text", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profiles with salary configuration"
+    },
+    "/users/{userId}/months/{monthKey}": {
+      "schema": "MonthlyBudget",
+      "description": "Monthly budget records"
+    },
+    "/users/{userId}/months/{monthKey}/items/{itemId}": {
+      "schema": "BudgetItem",
+      "description": "Checklist items for each month"
+    },
+    "/users/{userId}/templateItems/{itemId}": {
+      "schema": "TemplateItem",
+      "description": "Default recurring items used as monthly budget template"
+    },
+    "/users/{userId}/chatMessages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Financial advice conversational history"
+    }
+  }
+}
