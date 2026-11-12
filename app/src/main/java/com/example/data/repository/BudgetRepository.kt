@@ -3,6 +3,7 @@ package com.example.data.repository
 import android.content.Context
 import com.example.R
 import com.example.data.model.BudgetItem
+import com.example.data.model.CategoryUsageItem
 import com.example.data.model.ChatMessage
 import com.example.data.model.MonthlyBudget
 import com.example.data.model.SEBAS_DEFAULT_ITEMS
@@ -13,11 +14,15 @@ import com.example.util.handleFirestoreError
 import com.google.firebase.Firebase
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.auth
+import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.snapshots
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.emitAll
@@ -143,6 +148,176 @@ class BudgetRepository(private val db: FirebaseFirestore) {
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             ).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, userDoc.path)
+            Result.failure(e)
+        }
+    }
+
+    // Update Savings Tab Visibility in Profile
+    suspend fun updateShowSavingsTab(enabled: Boolean): Result<Unit> {
+        val uid = requireUserId()
+        val userDoc = db.collection("users").document(uid)
+        return try {
+            userDoc.update(
+                mapOf(
+                    "showSavingsTab" to enabled,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, userDoc.path)
+            Result.failure(e)
+        }
+    }
+
+    // Find all distinct items currently using a given category across months & templates
+    suspend fun findItemsUsingCategory(
+        categoryName: String,
+        currentMonthItems: List<BudgetItem> = emptyList()
+    ): Result<List<CategoryUsageItem>> {
+        val uid = requireUserId()
+        val userDoc = db.collection("users").document(uid)
+        return try {
+            val grouped = linkedMapOf<String, MutableList<Pair<String, Long>>>()
+
+            // Include in-memory current month items first
+            for (item in currentMonthItems) {
+                if (item.category.equals(categoryName, ignoreCase = true)) {
+                    val key = item.name.trim().lowercase()
+                    grouped.getOrPut(key) { mutableListOf() }.add(item.name to item.amount)
+                }
+            }
+
+            coroutineScope {
+                val monthsSnapDeferred = async { userDoc.collection("months").get().await() }
+                val templatesSnapDeferred = async { userDoc.collection("templateItems").get().await() }
+
+                val monthsSnap = monthsSnapDeferred.await()
+                val monthItemSnaps = monthsSnap.documents.map { monthDoc ->
+                    async { monthDoc.reference.collection("items").get().await() }
+                }.awaitAll()
+
+                val seenKeysFromCurrent = grouped.keys.toSet()
+                val remoteGrouped = linkedMapOf<String, MutableList<Pair<String, Long>>>()
+
+                for (snap in monthItemSnaps) {
+                    for (doc in snap.documents) {
+                        val cat = doc.getString("category") ?: ""
+                        if (cat.equals(categoryName, ignoreCase = true)) {
+                            val name = doc.getString("name") ?: continue
+                            val amount = doc.getLong("amount") ?: 0L
+                            val key = name.trim().lowercase()
+                            remoteGrouped.getOrPut(key) { mutableListOf() }.add(name to amount)
+                        }
+                    }
+                }
+
+                val templatesSnap = templatesSnapDeferred.await()
+                for (doc in templatesSnap.documents) {
+                    val cat = doc.getString("category") ?: ""
+                    if (cat.equals(categoryName, ignoreCase = true)) {
+                        val name = doc.getString("name") ?: continue
+                        val amount = doc.getLong("amount") ?: 0L
+                        val key = name.trim().lowercase()
+                        remoteGrouped.getOrPut(key) { mutableListOf() }.add(name to amount)
+                    }
+                }
+
+                for ((key, list) in remoteGrouped) {
+                    if (!seenKeysFromCurrent.contains(key)) {
+                        grouped[key] = list
+                    } else if (list.size > (grouped[key]?.size ?: 0)) {
+                        grouped[key] = list
+                    }
+                }
+            }
+
+            val usageItems = grouped.values.map { entries ->
+                val latest = entries.first()
+                CategoryUsageItem(
+                    name = latest.first,
+                    amount = latest.second,
+                    occurrences = entries.size
+                )
+            }.sortedByDescending { it.amount }
+
+            Result.success(usageItems)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.LIST, userDoc.path)
+            Result.failure(e)
+        }
+    }
+
+    // Reassign all items using oldCategory across all months and templateItems
+    suspend fun reassignCategoryAcrossAllMonths(
+        oldCategory: String,
+        reassignmentsByNormalizedName: Map<String, String>,
+        fallbackCategory: String? = null
+    ): Result<Unit> {
+        val uid = requireUserId()
+        val userDoc = db.collection("users").document(uid)
+        return try {
+            val updates = mutableListOf<Pair<DocumentReference, String>>()
+
+            coroutineScope {
+                val monthsSnapDeferred = async { userDoc.collection("months").get().await() }
+                val templatesSnapDeferred = async { userDoc.collection("templateItems").get().await() }
+
+                val monthsSnap = monthsSnapDeferred.await()
+                val monthItemSnaps = monthsSnap.documents.map { monthDoc ->
+                    async { monthDoc.reference.collection("items").get().await() }
+                }.awaitAll()
+
+                for (snap in monthItemSnaps) {
+                    for (doc in snap.documents) {
+                        val cat = doc.getString("category") ?: ""
+                        if (cat.equals(oldCategory, ignoreCase = true)) {
+                            val nameKey = (doc.getString("name") ?: "").trim().lowercase()
+                            val targetCat = reassignmentsByNormalizedName[nameKey] ?: fallbackCategory
+                            if (!targetCat.isNullOrBlank()) {
+                                updates.add(doc.reference to targetCat)
+                            }
+                        }
+                    }
+                }
+
+                val templatesSnap = templatesSnapDeferred.await()
+                for (doc in templatesSnap.documents) {
+                    val cat = doc.getString("category") ?: ""
+                    if (cat.equals(oldCategory, ignoreCase = true)) {
+                        val nameKey = (doc.getString("name") ?: "").trim().lowercase()
+                        val targetCat = reassignmentsByNormalizedName[nameKey] ?: fallbackCategory
+                        if (!targetCat.isNullOrBlank()) {
+                            updates.add(doc.reference to targetCat)
+                        }
+                    }
+                }
+            }
+
+            // Commit in chunks of 400 to stay safely below Firestore's 500 writes/batch limit
+            for (chunk in updates.chunked(400)) {
+                val batch = db.batch()
+                for ((ref, targetCat) in chunk) {
+                    batch.update(
+                        ref,
+                        mapOf(
+                            "category" to targetCat,
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    )
+                }
+                batch.commit().await()
+            }
+
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
@@ -439,9 +614,10 @@ class BudgetRepository(private val db: FirebaseFirestore) {
             db.collection("users").document(uid).collection("chatMessages")
                 .snapshots()
                 .map { snapshot ->
-                    snapshot.toObjects(ChatMessage::class.java).sortedBy {
-                        it.createdAt?.toDate()?.time ?: 0L
-                    }
+                    snapshot.toObjects(ChatMessage::class.java).sortedWith(
+                        compareBy<ChatMessage> { it.createdAt?.toDate()?.time ?: Long.MAX_VALUE }
+                            .thenBy { it.id }
+                    )
                 }
                 .catch { error ->
                     val firestoreError = generateSequence(error) { it.cause }
@@ -457,10 +633,14 @@ class BudgetRepository(private val db: FirebaseFirestore) {
         )
     }
 
-    suspend fun addChatMessage(role: String, text: String): Result<Unit> {
+    suspend fun addChatMessage(
+        role: String,
+        text: String,
+        messageId: String? = null
+    ): Result<Unit> {
         val uid = requireUserId()
         val chatCol = db.collection("users").document(uid).collection("chatMessages")
-        val doc = chatCol.document()
+        val doc = if (!messageId.isNullOrBlank()) chatCol.document(messageId) else chatCol.document()
         val map = mapOf(
             "userId" to uid,
             "role" to role,
@@ -482,11 +662,15 @@ class BudgetRepository(private val db: FirebaseFirestore) {
         val uid = requireUserId()
         val chatCol = db.collection("users").document(uid).collection("chatMessages")
         return try {
-            val batch = db.batch()
-            for (msg in messages) {
-                batch.delete(chatCol.document(msg.id))
+            val remoteIds = chatCol.get().await().documents.map { it.id }
+            val allIds = (remoteIds + messages.map { it.id }).filter { it.isNotBlank() }.distinct()
+            allIds.chunked(400).forEach { chunk ->
+                val batch = db.batch()
+                for (id in chunk) {
+                    batch.delete(chatCol.document(id))
+                }
+                batch.commit().await()
             }
-            batch.commit().await()
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e

@@ -13,6 +13,7 @@ data class UserProfile(
     val currency: String = "COP",
     val displayName: String = "",
     val customCategories: List<String> = emptyList(),
+    val showSavingsTab: Boolean = true,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )
@@ -64,8 +65,15 @@ data class ChatMessage(
     @ServerTimestamp val createdAt: Timestamp? = null
 )
 
+data class CategoryUsageItem(
+    val name: String,
+    val amount: Long,
+    val occurrences: Int = 1
+)
+
 // Categories used in Sebas's Excel file
 object BudgetCategories {
+    const val DELETED_PREFIX = "!DEL:"
     const val GASTOS_HOGAR = "Gastos Hogar"
     const val SERVICIOS_PUBLICOS = "Servicios Publicos"
     const val DEDUCIBLES_EMPRESA = "DeduciblesEmpresa"

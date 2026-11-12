@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.ai.FinancialAiService
 import com.example.data.model.BudgetCategories
 import com.example.data.model.BudgetItem
+import com.example.data.model.CategoryUsageItem
 import com.example.data.model.ChatMessage
 import com.example.data.model.UserProfile
 import com.example.data.repository.BudgetRepository
@@ -32,6 +33,23 @@ sealed interface DiagnosisUiState {
     data object Loading : DiagnosisUiState
     data class Success(val text: String) : DiagnosisUiState
     data class Error(val message: String) : DiagnosisUiState
+}
+
+sealed interface DeleteCategoryUiState {
+    data object Hidden : DeleteCategoryUiState
+    data class Checking(val category: String) : DeleteCategoryUiState
+    data class ConfirmEmpty(
+        val category: String,
+        val isDeleting: Boolean = false,
+        val error: String? = null
+    ) : DeleteCategoryUiState
+    data class ConfirmInUse(
+        val category: String,
+        val itemsInUse: List<CategoryUsageItem>,
+        val targetCategories: List<String>,
+        val isDeleting: Boolean = false,
+        val error: String? = null
+    ) : DeleteCategoryUiState
 }
 
 enum class ItemStatusFilter {
@@ -92,14 +110,27 @@ class BudgetViewModel(
     // Local in-memory chat list to ensure immediate responsiveness
     private val _localChatMessages = MutableStateFlow<List<ChatMessage>>(emptyList())
 
+    private val _deleteCategoryState = MutableStateFlow<DeleteCategoryUiState>(DeleteCategoryUiState.Hidden)
+    val deleteCategoryState: StateFlow<DeleteCategoryUiState> = _deleteCategoryState.asStateFlow()
+
     val userProfile: StateFlow<UserProfile?> = repository.observeUserProfile()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
-    // Dynamic list of all categories (defaults + user custom categories)
+    val showSavingsTab: StateFlow<Boolean> = userProfile
+        .map { it?.showSavingsTab ?: true }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), true)
+
+    // Dynamic list of all categories (active defaults + user custom categories, excluding deleted)
     val allCategories: StateFlow<List<String>> = userProfile.map { profile ->
-        val custom = profile?.customCategories ?: emptyList()
-        val combined = (BudgetCategories.ALL + custom).distinct()
-        combined
+        val stored = profile?.customCategories ?: emptyList()
+        val deletedBase = stored
+            .filter { it.startsWith(BudgetCategories.DELETED_PREFIX) }
+            .map { it.removePrefix(BudgetCategories.DELETED_PREFIX) }
+        val customActive = stored.filterNot { it.startsWith(BudgetCategories.DELETED_PREFIX) }
+        val baseActive = BudgetCategories.ALL.filterNot { base ->
+            deletedBase.any { it.equals(base, ignoreCase = true) }
+        }
+        (baseActive + customActive).distinct()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), BudgetCategories.ALL)
 
     // Raw items for current month with optimistic paid overrides applied
@@ -191,19 +222,27 @@ class BudgetViewModel(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), FinancialCalculations())
 
-    // Merged Chat Messages (remote + local immediate)
+    // Merged Chat Messages (remote + local immediate, deduplicated by shared messageId)
     val chatMessages: StateFlow<List<ChatMessage>> = combine(
         repository.observeChatMessages(),
         _localChatMessages
     ) { remote, local ->
         val map = LinkedHashMap<String, ChatMessage>()
-        for (m in remote) {
-            map[m.id] = m
-        }
         for (m in local) {
             map[m.id] = m
         }
-        map.values.sortedBy { it.createdAt?.toDate()?.time ?: 0L }
+        for (m in remote) {
+            val existingLocal = map[m.id]
+            map[m.id] = if (m.createdAt == null && existingLocal?.createdAt != null) {
+                m.copy(createdAt = existingLocal.createdAt)
+            } else {
+                m
+            }
+        }
+        map.values.sortedWith(
+            compareBy<ChatMessage> { it.createdAt?.toDate()?.time ?: Long.MAX_VALUE }
+                .thenBy { it.id }
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
     init {
@@ -376,43 +415,172 @@ class BudgetViewModel(
         }
     }
 
+    fun setShowSavingsTab(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.updateShowSavingsTab(enabled)
+        }
+    }
+
     // Category Management
     fun addCategory(categoryName: String) {
         val trimmed = categoryName.trim()
         if (trimmed.isBlank()) return
-        val current = userProfile.value?.customCategories ?: emptyList()
-        if (current.none { it.equals(trimmed, ignoreCase = true) } && BudgetCategories.ALL.none { it.equals(trimmed, ignoreCase = true) }) {
-            val updated = current + trimmed
-            viewModelScope.launch {
-                repository.updateCustomCategories(updated)
-            }
+        if (allCategories.value.any { it.equals(trimmed, ignoreCase = true) }) return
+
+        val stored = userProfile.value?.customCategories ?: emptyList()
+        val baseMatch = BudgetCategories.ALL.firstOrNull { it.equals(trimmed, ignoreCase = true) }
+        val updated = if (baseMatch != null) {
+            // Re-enable previously deleted base category
+            stored.filterNot { it.equals("${BudgetCategories.DELETED_PREFIX}$baseMatch", ignoreCase = true) }
+        } else {
+            (stored + trimmed).distinct()
+        }
+        viewModelScope.launch {
+            repository.updateCustomCategories(updated)
         }
     }
 
     fun renameCategory(oldName: String, newName: String) {
         val trimmed = newName.trim()
         if (trimmed.isBlank() || trimmed == oldName) return
-        val current = userProfile.value?.customCategories ?: emptyList()
-        val updated = current.map { if (it.equals(oldName, ignoreCase = true)) trimmed else it }
+        if (allCategories.value.any { !it.equals(oldName, ignoreCase = true) && it.equals(trimmed, ignoreCase = true) }) return
+
+        val stored = userProfile.value?.customCategories ?: emptyList()
+        val baseOld = BudgetCategories.ALL.firstOrNull { it.equals(oldName, ignoreCase = true) }
+        val baseNew = BudgetCategories.ALL.firstOrNull { it.equals(trimmed, ignoreCase = true) }
+
+        val updatedList = stored.toMutableList()
+        if (baseNew != null) {
+            updatedList.removeAll { it.equals("${BudgetCategories.DELETED_PREFIX}$baseNew", ignoreCase = true) }
+        }
+        if (baseOld != null) {
+            val delMarker = "${BudgetCategories.DELETED_PREFIX}$baseOld"
+            if (updatedList.none { it.equals(delMarker, ignoreCase = true) }) {
+                updatedList.add(delMarker)
+            }
+            if (baseNew == null && updatedList.none { it.equals(trimmed, ignoreCase = true) }) {
+                updatedList.add(trimmed)
+            }
+        } else {
+            updatedList.removeAll { it.equals(oldName, ignoreCase = true) }
+            if (baseNew == null && updatedList.none { it.equals(trimmed, ignoreCase = true) }) {
+                updatedList.add(trimmed)
+            }
+        }
+
         viewModelScope.launch {
-            repository.updateCustomCategories(updated)
-            // Also update any items in current month using oldName
-            for (item in monthItems.value) {
-                if (item.category.equals(oldName, ignoreCase = true)) {
-                    repository.updateItem(item.copy(category = trimmed))
-                }
+            repository.updateCustomCategories(updatedList.distinct())
+            repository.reassignCategoryAcrossAllMonths(
+                oldCategory = oldName,
+                reassignmentsByNormalizedName = emptyMap(),
+                fallbackCategory = trimmed
+            )
+            if (_selectedCategory.value?.equals(oldName, ignoreCase = true) == true) {
+                _selectedCategory.value = trimmed
             }
         }
     }
 
-    fun deleteCategory(categoryName: String) {
-        val current = userProfile.value?.customCategories ?: emptyList()
-        val updated = current.filterNot { it.equals(categoryName, ignoreCase = true) }
+    fun requestDeleteCategory(categoryName: String) {
+        if (allCategories.value.size <= 1) return
+        _deleteCategoryState.value = DeleteCategoryUiState.Checking(categoryName)
+
         viewModelScope.launch {
-            repository.updateCustomCategories(updated)
-            if (_selectedCategory.value == categoryName) {
+            val targets = allCategories.value.filterNot { it.equals(categoryName, ignoreCase = true) }
+            val result = repository.findItemsUsingCategory(categoryName, monthItems.value)
+            val usageItems = if (result.isSuccess) {
+                result.getOrThrow()
+            } else {
+                monthItems.value
+                    .filter { it.category.equals(categoryName, ignoreCase = true) }
+                    .groupBy { it.name.trim().lowercase() }
+                    .values
+                    .map { list ->
+                        CategoryUsageItem(
+                            name = list.first().name,
+                            amount = list.first().amount,
+                            occurrences = list.size
+                        )
+                    }
+                    .sortedByDescending { it.amount }
+            }
+
+            _deleteCategoryState.value = if (usageItems.isEmpty()) {
+                DeleteCategoryUiState.ConfirmEmpty(category = categoryName)
+            } else {
+                DeleteCategoryUiState.ConfirmInUse(
+                    category = categoryName,
+                    itemsInUse = usageItems,
+                    targetCategories = targets
+                )
+            }
+        }
+    }
+
+    fun dismissDeleteCategory() {
+        _deleteCategoryState.value = DeleteCategoryUiState.Hidden
+    }
+
+    fun confirmDeleteCategory(
+        reassignmentsByNormalizedName: Map<String, String> = emptyMap(),
+        fallbackCategory: String? = null
+    ) {
+        val currentState = _deleteCategoryState.value
+        val categoryToDelete = when (currentState) {
+            is DeleteCategoryUiState.ConfirmEmpty -> {
+                if (currentState.isDeleting) return
+                _deleteCategoryState.value = currentState.copy(isDeleting = true, error = null)
+                currentState.category
+            }
+            is DeleteCategoryUiState.ConfirmInUse -> {
+                if (currentState.isDeleting) return
+                _deleteCategoryState.value = currentState.copy(isDeleting = true, error = null)
+                currentState.category
+            }
+            else -> return
+        }
+
+        viewModelScope.launch {
+            if (currentState is DeleteCategoryUiState.ConfirmInUse) {
+                val reassignResult = repository.reassignCategoryAcrossAllMonths(
+                    oldCategory = categoryToDelete,
+                    reassignmentsByNormalizedName = reassignmentsByNormalizedName,
+                    fallbackCategory = fallbackCategory ?: currentState.targetCategories.firstOrNull()
+                )
+                if (reassignResult.isFailure) {
+                    _deleteCategoryState.value = currentState.copy(
+                        isDeleting = false,
+                        error = "No se pudieron reasignar los ítems. Intenta de nuevo."
+                    )
+                    return@launch
+                }
+            }
+
+            val stored = userProfile.value?.customCategories ?: emptyList()
+            val updated = stored.filterNot { it.equals(categoryToDelete, ignoreCase = true) }.toMutableList()
+            val baseMatch = BudgetCategories.ALL.firstOrNull { it.equals(categoryToDelete, ignoreCase = true) }
+            if (baseMatch != null) {
+                val marker = "${BudgetCategories.DELETED_PREFIX}$baseMatch"
+                if (updated.none { it.equals(marker, ignoreCase = true) }) {
+                    updated.add(marker)
+                }
+            }
+
+            val updateResult = repository.updateCustomCategories(updated.distinct())
+            if (updateResult.isFailure) {
+                val errMsg = "No se pudo eliminar la categoría. Intenta de nuevo."
+                _deleteCategoryState.value = when (currentState) {
+                    is DeleteCategoryUiState.ConfirmEmpty -> currentState.copy(isDeleting = false, error = errMsg)
+                    is DeleteCategoryUiState.ConfirmInUse -> currentState.copy(isDeleting = false, error = errMsg)
+                    else -> DeleteCategoryUiState.Hidden
+                }
+                return@launch
+            }
+
+            if (_selectedCategory.value?.equals(categoryToDelete, ignoreCase = true) == true) {
                 _selectedCategory.value = null
             }
+            _deleteCategoryState.value = DeleteCategoryUiState.Hidden
         }
     }
 
@@ -436,27 +604,27 @@ class BudgetViewModel(
     fun sendChatMessage(text: String) {
         if (text.isBlank() || _isSendingChat.value) return
         val cleanText = text.trim()
-        val localUserMsgId = "local_user_${UUID.randomUUID()}"
+        val historyBeforeCurrent = chatMessages.value
+        val userMsgId = UUID.randomUUID().toString()
         val userMsg = ChatMessage(
-            id = localUserMsgId,
+            id = userMsgId,
             role = "user",
             text = cleanText,
             createdAt = Timestamp.now()
         )
-        // 1. Immediately display user message in UI
+        // 1. Immediately display user message in UI with the exact ID used in Firestore
         _localChatMessages.update { it + userMsg }
         _isSendingChat.value = true
         _chatErrorMessage.value = null
 
         viewModelScope.launch {
-            // Asynchronously persist user message
-            repository.addChatMessage(role = "user", text = cleanText)
+            // Asynchronously persist user message using the same deterministic document ID
+            repository.addChatMessage(role = "user", text = cleanText, messageId = userMsgId)
 
             // 2. Query Gemini
             val salary = userProfile.value?.monthlySalary ?: 11300000L
             val items = monthItems.value
-            val history = chatMessages.value
-            val result = aiService.sendChatMessage(cleanText, history, salary, items)
+            val result = aiService.sendChatMessage(cleanText, historyBeforeCurrent, salary, items)
 
             val replyText = if (result.isSuccess) {
                 result.getOrThrow()
@@ -467,15 +635,15 @@ class BudgetViewModel(
                 generateFallbackFinancialAdvice(cleanText, salary, items)
             }
 
-            val localModelMsgId = "local_model_${UUID.randomUUID()}"
+            val modelMsgId = UUID.randomUUID().toString()
             val modelMsg = ChatMessage(
-                id = localModelMsgId,
+                id = modelMsgId,
                 role = "model",
                 text = replyText,
                 createdAt = Timestamp.now()
             )
             _localChatMessages.update { it + modelMsg }
-            repository.addChatMessage(role = "model", text = replyText)
+            repository.addChatMessage(role = "model", text = replyText, messageId = modelMsgId)
             _isSendingChat.value = false
         }
     }
@@ -523,9 +691,10 @@ class BudgetViewModel(
     }
 
     fun clearChat() {
+        val snapshot = chatMessages.value
         _localChatMessages.value = emptyList()
         viewModelScope.launch {
-            repository.clearChatMessages(chatMessages.value)
+            repository.clearChatMessages(snapshot)
         }
     }
 

@@ -10,6 +10,7 @@
         "currency": { "type": "string", "description": "Currency code like COP" },
         "displayName": { "type": "string", "description": "User display name" },
         "customCategories": { "type": "array", "items": { "type": "string" }, "description": "Custom user categories" },
+        "showSavingsTab": { "type": "boolean", "description": "Whether the Savings tab is visible in the bottom bar (defaults to true)" },
         "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp via serverTimestamp" },
         "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp via serverTimestamp" }
       },
@@ -73,6 +74,57 @@
         "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp via serverTimestamp" }
       },
       "required": ["userId", "role", "text", "createdAt"]
+    },
+    "SavingsPocket": {
+      "title": "SavingsPocket",
+      "description": "Independent personal or partner-shared savings pocket",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "description": "Creator user ID" },
+        "memberUids": { "type": "array", "items": { "type": "string" }, "description": "Authorized member UIDs (max 10)" },
+        "memberNames": { "type": "object", "description": "Map of UID to display name for pocket members" },
+        "name": { "type": "string", "description": "Pocket title" },
+        "currentAmount": { "type": "integer", "description": "Current accumulated balance in COP" },
+        "targetAmount": { "type": "integer", "description": "Optional savings goal amount in COP" },
+        "iconKey": { "type": "string", "description": "Selected icon identifier" },
+        "colorKey": { "type": "string", "description": "Selected theme color identifier" },
+        "shareCode": { "type": "string", "description": "Optional active invite code" },
+        "shareCodeExpiresAt": { "type": "string", "format": "date-time", "description": "Optional invite code expiration timestamp" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp via serverTimestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp via serverTimestamp" }
+      },
+      "required": ["ownerId", "memberUids", "name", "currentAmount", "iconKey", "colorKey", "createdAt", "updatedAt"]
+    },
+    "PocketMovement": {
+      "title": "PocketMovement",
+      "description": "Immutable deposit or withdrawal record inside a savings pocket",
+      "type": "object",
+      "properties": {
+        "pocketId": { "type": "string", "description": "Parent savings pocket ID" },
+        "userId": { "type": "string", "description": "Author user ID" },
+        "userName": { "type": "string", "description": "Author display name" },
+        "type": { "type": "string", "enum": ["deposit", "withdraw", "initial"], "description": "Movement direction" },
+        "amount": { "type": "integer", "description": "Positive movement amount in COP" },
+        "balanceAfter": { "type": "integer", "description": "Pocket balance after this movement" },
+        "note": { "type": "string", "description": "Optional note" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp via serverTimestamp" }
+      },
+      "required": ["pocketId", "userId", "userName", "type", "amount", "balanceAfter", "createdAt"]
+    },
+    "PocketInvite": {
+      "title": "PocketInvite",
+      "description": "Temporary invite code lookup document for joining a shared savings pocket",
+      "type": "object",
+      "properties": {
+        "pocketId": { "type": "string", "description": "Target savings pocket ID" },
+        "pocketName": { "type": "string", "description": "Target pocket name" },
+        "ownerId": { "type": "string", "description": "Pocket creator UID" },
+        "ownerName": { "type": "string", "description": "Pocket creator display name" },
+        "isActive": { "type": "boolean", "description": "Whether the invite code can currently be redeemed" },
+        "expiresAt": { "type": "string", "format": "date-time", "description": "Expiration timestamp" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp via serverTimestamp" }
+      },
+      "required": ["pocketId", "pocketName", "ownerId", "ownerName", "isActive", "expiresAt", "createdAt"]
     }
   },
   "firestore": {
@@ -95,6 +147,18 @@
     "/users/{userId}/chatMessages/{messageId}": {
       "schema": "ChatMessage",
       "description": "Financial advice conversational history"
+    },
+    "/savingsPockets/{pocketId}": {
+      "schema": "SavingsPocket",
+      "description": "Personal and partner-shared savings pockets"
+    },
+    "/savingsPockets/{pocketId}/movements/{movementId}": {
+      "schema": "PocketMovement",
+      "description": "Immutable savings pocket deposit/withdrawal history"
+    },
+    "/pocketInvites/{inviteCode}": {
+      "schema": "PocketInvite",
+      "description": "Temporary regenerable invite codes for joining shared pockets"
     }
   }
 }

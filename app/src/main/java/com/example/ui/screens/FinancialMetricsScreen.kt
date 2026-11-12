@@ -49,6 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.components.CategoryVisuals
+import com.example.ui.components.MarkdownText
 import com.example.ui.viewmodel.BudgetViewModel
 import com.example.ui.viewmodel.DiagnosisUiState
 import java.util.Locale
@@ -358,7 +359,7 @@ private fun AiDiagnosisBanner(
                             modifier = Modifier.padding(14.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(
+                            MarkdownText(
                                 text = diagnosisState.text,
                                 style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp),
                                 color = MaterialTheme.colorScheme.onSurface

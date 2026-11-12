@@ -28,7 +28,8 @@ service cloud.firestore {
              data.monthlySalary is int && data.monthlySalary >= 0 && data.monthlySalary <= 10000000000 &&
              data.currency is string && data.currency.size() >= 2 && data.currency.size() <= 10 &&
              (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 120)) &&
-             (!('customCategories' in data) || (data.customCategories is list && data.customCategories.size() <= 50));
+             (!('customCategories' in data) || (data.customCategories is list && data.customCategories.size() <= 50)) &&
+             (!('showSavingsTab' in data) || data.showSavingsTab is bool);
     }
 
     function isValidMonthlyBudget(data) {
@@ -63,6 +64,80 @@ service cloud.firestore {
              data.text is string && data.text.size() > 0 && data.text.size() <= 10000;
     }
 
+    function isValidSavingsPocket(data) {
+      return isValidId(data.ownerId) &&
+             data.memberUids is list &&
+             data.memberUids.size() >= 1 &&
+             data.memberUids.size() <= 10 &&
+             data.ownerId in data.memberUids &&
+             (!('memberNames' in data) || (data.memberNames is map && data.memberNames.size() <= 10)) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 80 &&
+             data.currentAmount is int && data.currentAmount >= 0 && data.currentAmount <= 100000000000 &&
+             (!('targetAmount' in data) || data.targetAmount == null || (data.targetAmount is int && data.targetAmount > 0 && data.targetAmount <= 100000000000)) &&
+             data.iconKey is string && data.iconKey.size() > 0 && data.iconKey.size() <= 40 &&
+             data.colorKey is string && data.colorKey.size() > 0 && data.colorKey.size() <= 30 &&
+             (!('shareCode' in data) || data.shareCode == null || (data.shareCode is string && data.shareCode.size() >= 4 && data.shareCode.size() <= 16)) &&
+             (!('shareCodeExpiresAt' in data) || data.shareCodeExpiresAt == null || data.shareCodeExpiresAt is timestamp);
+    }
+
+    function isValidPocketMovement(data) {
+      return isValidId(data.pocketId) &&
+             isValidId(data.userId) &&
+             data.userName is string && data.userName.size() > 0 && data.userName.size() <= 120 &&
+             data.type is string && (data.type == 'deposit' || data.type == 'withdraw' || data.type == 'initial') &&
+             data.amount is int && data.amount > 0 && data.amount <= 100000000000 &&
+             data.balanceAfter is int && data.balanceAfter >= 0 && data.balanceAfter <= 100000000000 &&
+             (!('note' in data) || data.note == null || (data.note is string && data.note.size() <= 200));
+    }
+
+    function isValidPocketInvite(data) {
+      return isValidId(data.pocketId) &&
+             data.pocketName is string && data.pocketName.size() > 0 && data.pocketName.size() <= 80 &&
+             isValidId(data.ownerId) &&
+             data.ownerName is string && data.ownerName.size() > 0 && data.ownerName.size() <= 120 &&
+             data.isActive is bool &&
+             data.expiresAt is timestamp;
+    }
+
+    function isPocketMember(data) {
+      return isSignedIn() && data.memberUids is list && request.auth.uid in data.memberUids;
+    }
+
+    function isParentPocketMember(pocketId) {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/savingsPockets/$(pocketId)) &&
+             request.auth.uid in get(/databases/$(database)/documents/savingsPockets/$(pocketId)).data.memberUids;
+    }
+
+    function isParentPocketOwner(pocketId) {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/savingsPockets/$(pocketId)) &&
+             request.auth.uid == get(/databases/$(database)/documents/savingsPockets/$(pocketId)).data.ownerId;
+    }
+
+    function canJoinPocketViaInvite(pocketId) {
+      return isSignedIn() &&
+             !(request.auth.uid in existing().memberUids) &&
+             incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'memberNames', 'updatedAt']) &&
+             incoming().memberUids.hasAll(existing().memberUids) &&
+             incoming().memberUids.size() == existing().memberUids.size() + 1 &&
+             request.auth.uid in incoming().memberUids &&
+             (!('memberNames' in incoming()) ||
+               (!('memberNames' in existing()) && incoming().memberNames.keys().hasOnly([request.auth.uid])) ||
+               ('memberNames' in existing() && incoming().memberNames.diff(existing().memberNames).affectedKeys().hasOnly([request.auth.uid]))
+             ) &&
+             'shareCode' in existing() &&
+             existing().shareCode is string &&
+             existing().shareCode.size() >= 4 &&
+             'shareCodeExpiresAt' in existing() &&
+             existing().shareCodeExpiresAt is timestamp &&
+             existing().shareCodeExpiresAt > request.time &&
+             exists(/databases/$(database)/documents/pocketInvites/$(existing().shareCode)) &&
+             get(/databases/$(database)/documents/pocketInvites/$(existing().shareCode)).data.isActive == true &&
+             get(/databases/$(database)/documents/pocketInvites/$(existing().shareCode)).data.pocketId == pocketId &&
+             get(/databases/$(database)/documents/pocketInvites/$(existing().shareCode)).data.expiresAt > request.time;
+    }
+
     // User Profile
     match /users/{userId} {
       allow get: if isSignedIn() && request.auth.uid == userId;
@@ -72,7 +147,7 @@ service cloud.firestore {
                        request.auth.uid == userId &&
                        incoming().userId == request.auth.uid &&
                        incoming().keys().hasAll(['userId', 'monthlySalary', 'currency', 'createdAt', 'updatedAt']) &&
-                       incoming().keys().hasOnly(['userId', 'monthlySalary', 'currency', 'displayName', 'customCategories', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'monthlySalary', 'currency', 'displayName', 'customCategories', 'showSavingsTab', 'createdAt', 'updatedAt']) &&
                        incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
                        incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
                        isValidUserProfile(incoming());
@@ -83,7 +158,7 @@ service cloud.firestore {
                        incoming().createdAt == existing().createdAt &&
                        incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
                        isValidUserProfile(incoming()) &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['monthlySalary', 'currency', 'displayName', 'customCategories', 'updatedAt']);
+                       incoming().diff(existing()).affectedKeys().hasOnly(['monthlySalary', 'currency', 'displayName', 'customCategories', 'showSavingsTab', 'updatedAt']);
 
       allow delete: if isSignedIn() && request.auth.uid == userId;
 
@@ -178,6 +253,95 @@ service cloud.firestore {
         allow update: if false;
         allow delete: if isSignedIn() && request.auth.uid == userId;
       }
+    }
+
+    // Shared & Personal Savings Pockets
+    match /savingsPockets/{pocketId} {
+      allow get, list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+      allow create: if isSignedIn() &&
+                       incoming().ownerId == request.auth.uid &&
+                       incoming().memberUids is list &&
+                       incoming().memberUids.size() == 1 &&
+                       request.auth.uid in incoming().memberUids &&
+                       incoming().keys().hasAll(['ownerId', 'memberUids', 'name', 'currentAmount', 'iconKey', 'colorKey', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['ownerId', 'memberUids', 'memberNames', 'name', 'currentAmount', 'targetAmount', 'iconKey', 'colorKey', 'shareCode', 'shareCodeExpiresAt', 'createdAt', 'updatedAt']) &&
+                       incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       isValidSavingsPocket(incoming());
+
+      allow update: if isSignedIn() &&
+                       incoming().ownerId == existing().ownerId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       isValidSavingsPocket(incoming()) &&
+                       (
+                         // Case 1: Owner has full update control (keeping themselves in memberUids)
+                         (
+                           request.auth.uid == existing().ownerId &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['name', 'currentAmount', 'targetAmount', 'iconKey', 'colorKey', 'shareCode', 'shareCodeExpiresAt', 'memberUids', 'memberNames', 'updatedAt'])
+                         ) ||
+                         // Case 2: Invited member can edit balance/goal/appearance
+                         (
+                           isPocketMember(existing()) &&
+                           request.auth.uid != existing().ownerId &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['name', 'currentAmount', 'targetAmount', 'iconKey', 'colorKey', 'updatedAt'])
+                         ) ||
+                         // Case 3: Invited member can leave the pocket (remove only themselves)
+                         (
+                           isPocketMember(existing()) &&
+                           request.auth.uid != existing().ownerId &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'memberNames', 'updatedAt']) &&
+                           !(request.auth.uid in incoming().memberUids) &&
+                           existing().memberUids.hasAll(incoming().memberUids) &&
+                           incoming().memberUids.size() == existing().memberUids.size() - 1
+                         ) ||
+                         // Case 4: Non-member joining via an active, unexpired invite code
+                         canJoinPocketViaInvite(pocketId)
+                       );
+
+      allow delete: if isSignedIn() && existing().ownerId == request.auth.uid;
+
+      // Immutable Pocket Movement Ledger
+      match /movements/{movementId} {
+        allow get, list: if isParentPocketMember(pocketId);
+
+        allow create: if isParentPocketMember(pocketId) &&
+                         incoming().pocketId == pocketId &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll(['pocketId', 'userId', 'userName', 'type', 'amount', 'balanceAfter', 'createdAt']) &&
+                         incoming().keys().hasOnly(['pocketId', 'userId', 'userName', 'type', 'amount', 'balanceAfter', 'note', 'createdAt']) &&
+                         incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                         isValidPocketMovement(incoming());
+
+        allow update: if false;
+        allow delete: if isParentPocketOwner(pocketId);
+      }
+    }
+
+    // Regenerable Temporary Invite Codes (lookup by exact code only, no listing)
+    match /pocketInvites/{inviteCode} {
+      allow get: if isSignedIn();
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+                       incoming().ownerId == request.auth.uid &&
+                       exists(/databases/$(database)/documents/savingsPockets/$(incoming().pocketId)) &&
+                       get(/databases/$(database)/documents/savingsPockets/$(incoming().pocketId)).data.ownerId == request.auth.uid &&
+                       incoming().keys().hasAll(['pocketId', 'pocketName', 'ownerId', 'ownerName', 'isActive', 'expiresAt', 'createdAt']) &&
+                       incoming().keys().hasOnly(['pocketId', 'pocketName', 'ownerId', 'ownerName', 'isActive', 'expiresAt', 'createdAt']) &&
+                       incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                       isValidPocketInvite(incoming());
+
+      allow update: if isSignedIn() &&
+                       existing().ownerId == request.auth.uid &&
+                       incoming().ownerId == existing().ownerId &&
+                       incoming().pocketId == existing().pocketId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidPocketInvite(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['isActive', 'expiresAt', 'pocketName']);
+
+      allow delete: if isSignedIn() && existing().ownerId == request.auth.uid;
     }
   }
 }

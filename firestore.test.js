@@ -118,3 +118,165 @@ test("Ghost field attack: rejected by strict keys", async () => {
     })
   );
 });
+
+test("Savings pockets: owner creates, shares via temporary code, partner joins, edits, and leaves", async () => {
+  const CHARLIE_UID = "charlie_789";
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const bobDb = testEnv.authenticatedContext(BOB_UID).firestore();
+  const charlieDb = testEnv.authenticatedContext(CHARLIE_UID).firestore();
+  const now = new Date();
+  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+  const pocketRef = aliceDb.collection("savingsPockets").doc("pocket_1");
+  await assertSucceeds(
+    pocketRef.set({
+      ownerId: ALICE_UID,
+      memberUids: [ALICE_UID],
+      memberNames: { [ALICE_UID]: "Alice" },
+      name: "Viaje a Europa",
+      currentAmount: 500000,
+      targetAmount: 5000000,
+      iconKey: "flight",
+      colorKey: "blue",
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  // Non-member Bob and unauthenticated users cannot read or query Alice's pocket
+  await assertFails(bobDb.collection("savingsPockets").doc("pocket_1").get());
+  await assertFails(bobDb.collection("savingsPockets").get());
+  await assertFails(testEnv.unauthenticatedContext().firestore().collection("savingsPockets").doc("pocket_1").get());
+
+  // Alice activates temporary share code
+  await assertSucceeds(
+    pocketRef.update({
+      shareCode: "AHO84K2",
+      shareCodeExpiresAt: tomorrow,
+      updatedAt: new Date(),
+    })
+  );
+  await assertSucceeds(
+    aliceDb.collection("pocketInvites").doc("AHO84K2").set({
+      pocketId: "pocket_1",
+      pocketName: "Viaje a Europa",
+      ownerId: ALICE_UID,
+      ownerName: "Alice",
+      isActive: true,
+      expiresAt: tomorrow,
+      createdAt: now,
+    })
+  );
+
+  // Listing all invites is forbidden (only exact lookup by code is allowed)
+  await assertFails(bobDb.collection("pocketInvites").get());
+  await assertSucceeds(bobDb.collection("pocketInvites").doc("AHO84K2").get());
+
+  // Bob joins using active code without tampering with owner or balance
+  await assertSucceeds(
+    bobDb.collection("savingsPockets").doc("pocket_1").update({
+      memberUids: [ALICE_UID, BOB_UID],
+      [`memberNames.${BOB_UID}`]: "Bob",
+      updatedAt: new Date(),
+    })
+  );
+
+  // Charlie cannot hijack pocket balance during join
+  await assertFails(
+    charlieDb.collection("savingsPockets").doc("pocket_1").update({
+      memberUids: [ALICE_UID, BOB_UID, CHARLIE_UID],
+      currentAmount: 0,
+      updatedAt: new Date(),
+    })
+  );
+
+  // Bob can now query his pockets, update goal/balance, and record a movement
+  await assertSucceeds(bobDb.collection("savingsPockets").where("memberUids", "array-contains", BOB_UID).get());
+  await assertSucceeds(
+    bobDb.collection("savingsPockets").doc("pocket_1").update({
+      currentAmount: 700000,
+      targetAmount: 6000000,
+      updatedAt: new Date(),
+    })
+  );
+  await assertSucceeds(
+    bobDb.collection("savingsPockets").doc("pocket_1").collection("movements").doc("mov_1").set({
+      pocketId: "pocket_1",
+      userId: BOB_UID,
+      userName: "Bob",
+      type: "deposit",
+      amount: 200000,
+      balanceAfter: 700000,
+      note: "Aporte quincena",
+      createdAt: now,
+    })
+  );
+
+  // Bob cannot delete the pocket or change shareCode, and movements are immutable
+  await assertFails(bobDb.collection("savingsPockets").doc("pocket_1").delete());
+  await assertFails(
+    bobDb.collection("savingsPockets").doc("pocket_1").update({
+      shareCode: "HACKED",
+      updatedAt: new Date(),
+    })
+  );
+  await assertFails(
+    bobDb.collection("savingsPockets").doc("pocket_1").collection("movements").doc("mov_1").update({
+      amount: 999999,
+    })
+  );
+
+  // Bob can leave the pocket
+  await assertSucceeds(
+    bobDb.collection("savingsPockets").doc("pocket_1").update({
+      memberUids: [ALICE_UID],
+      updatedAt: new Date(),
+    })
+  );
+
+  // After leaving, Bob immediately loses access to the pocket and its movements
+  await assertFails(bobDb.collection("savingsPockets").doc("pocket_1").get());
+  await assertFails(bobDb.collection("savingsPockets").doc("pocket_1").collection("movements").doc("mov_1").get());
+});
+
+test("Savings pockets: expired or deactivated invite code rejects join", async () => {
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const bobDb = testEnv.authenticatedContext(BOB_UID).firestore();
+  const now = new Date();
+  const expired = new Date(Date.now() - 60 * 1000);
+
+  await assertSucceeds(
+    aliceDb.collection("savingsPockets").doc("pocket_exp").set({
+      ownerId: ALICE_UID,
+      memberUids: [ALICE_UID],
+      memberNames: { [ALICE_UID]: "Alice" },
+      name: "Fondo",
+      currentAmount: 100000,
+      iconKey: "savings",
+      colorKey: "emerald",
+      shareCode: "EXP1234",
+      shareCodeExpiresAt: expired,
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+  await assertSucceeds(
+    aliceDb.collection("pocketInvites").doc("EXP1234").set({
+      pocketId: "pocket_exp",
+      pocketName: "Fondo",
+      ownerId: ALICE_UID,
+      ownerName: "Alice",
+      isActive: true,
+      expiresAt: expired,
+      createdAt: now,
+    })
+  );
+
+  await assertFails(
+    bobDb.collection("savingsPockets").doc("pocket_exp").update({
+      memberUids: [ALICE_UID, BOB_UID],
+      [`memberNames.${BOB_UID}`]: "Bob",
+      updatedAt: new Date(),
+    })
+  );
+});

@@ -52,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChatMessage
+import com.example.ui.components.MarkdownText
 import com.example.ui.viewmodel.BudgetViewModel
 
 @Composable
@@ -60,15 +61,22 @@ fun AiAdvisorChatScreen(
 ) {
     val messages by viewModel.chatMessages.collectAsState()
     val isSending by viewModel.isSendingChat.collectAsState()
+    val metrics by viewModel.financialMetrics.collectAsState()
     val listState = rememberLazyListState()
     var inputText by remember { mutableStateOf("") }
+
+    val freeCashSuggestion = if (metrics.freeCash > 0L) {
+        "¿Cómo distribuyo los ${viewModel.formatCurrency(metrics.freeCash)} que me quedan libres este mes?"
+    } else {
+        "¿Cómo puedo liberar más dinero de mi presupuesto este mes?"
+    }
 
     val suggestedQuestions = listOf(
         "¿Cuál de mis deudas debería liquidar primero?",
         "¿Cómo optimizo mi retención en la fuente con mi pensión voluntaria?",
         "¿En qué cuenta de alto rendimiento me conviene guardar mi dinero?",
         "¿Cuánto debería tener en mi fondo de emergencia?",
-        "¿Cómo distribuyo los $1.176.000 que me quedan libres este mes?"
+        freeCashSuggestion
     )
 
     // Scroll to bottom when new messages arrive
@@ -152,11 +160,13 @@ fun AiAdvisorChatScreen(
                         .padding(bottom = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    for (question in suggestedQuestions) {
+                    suggestedQuestions.forEachIndexed { index, question ->
                         SuggestionChip(
                             onClick = {
                                 viewModel.sendChatMessage(question)
                             },
+                            enabled = !isSending,
+                            modifier = Modifier.testTag("suggested_question_chip_$index"),
                             label = { Text(question, fontSize = 12.sp) },
                             icon = {
                                 Icon(
@@ -337,7 +347,7 @@ private fun ChatMessageBubble(message: ChatMessage) {
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
         ) {
-            Text(
+            MarkdownText(
                 text = message.text,
                 modifier = Modifier.padding(14.dp),
                 style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 21.sp),
