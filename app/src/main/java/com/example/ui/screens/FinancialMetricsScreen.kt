@@ -18,20 +18,27 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Balance
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.RocketLaunch
 import androidx.compose.material.icons.filled.Savings
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -43,8 +50,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -56,7 +66,8 @@ import java.util.Locale
 
 @Composable
 fun FinancialMetricsScreen(
-    viewModel: BudgetViewModel
+    viewModel: BudgetViewModel,
+    onOpenSettings: (() -> Unit)? = null
 ) {
     val metrics by viewModel.financialMetrics.collectAsState()
     val diagnosisState by viewModel.diagnosisState.collectAsState()
@@ -71,17 +82,34 @@ fun FinancialMetricsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // Title
-        Column {
-            Text(
-                text = "Salud de tu Sueldo",
-                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Text(
-                text = "Análisis financiero detallado y recomendaciones prácticas para Colombia",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Salud de tu Sueldo",
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    text = "Análisis financiero detallado y recomendaciones prácticas para Colombia",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (onOpenSettings != null) {
+                IconButton(
+                    onClick = onOpenSettings,
+                    modifier = Modifier.testTag("btn_open_settings_shortcut")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Abrir Ajustes"
+                    )
+                }
+            }
         }
 
         // 1. Health Score Card
@@ -202,6 +230,7 @@ private fun HealthScoreCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 MetricMiniBadge(
+                    icon = Icons.Default.Savings,
                     label = "Ahorro/Inv.",
                     value = "${String.format(Locale.US, "%.1f", savingsPct)}%",
                     subtext = viewModel.formatCurrency(totalSavings),
@@ -209,6 +238,7 @@ private fun HealthScoreCard(
                     modifier = Modifier.weight(1f)
                 )
                 MetricMiniBadge(
+                    icon = Icons.Default.CreditCard,
                     label = "Endeudamiento",
                     value = "${String.format(Locale.US, "%.1f", debtPct)}%",
                     subtext = viewModel.formatCurrency(totalDebt),
@@ -216,6 +246,7 @@ private fun HealthScoreCard(
                     modifier = Modifier.weight(1f)
                 )
                 MetricMiniBadge(
+                    icon = Icons.Default.AccountBalanceWallet,
                     label = "Libre",
                     value = "${String.format(Locale.US, "%.1f", freePct)}%",
                     subtext = viewModel.formatCurrency(freeCash),
@@ -229,6 +260,7 @@ private fun HealthScoreCard(
 
 @Composable
 private fun MetricMiniBadge(
+    icon: ImageVector,
     label: String,
     value: String,
     subtext: String,
@@ -237,17 +269,25 @@ private fun MetricMiniBadge(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(12.dp),
         color = color.copy(alpha = 0.08f)
     ) {
         Column(
-            modifier = Modifier.padding(8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier.padding(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(18.dp)
+            )
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
             )
             Text(
                 text = value,
@@ -275,7 +315,9 @@ private fun AiDiagnosisBanner(
             .testTag("ai_diagnosis_card"),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+                .copy(alpha = 0.5f)
+                .compositeOver(MaterialTheme.colorScheme.surface)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -532,36 +574,61 @@ private fun CategoryDistributionCard(
             modifier = Modifier.padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = "Distribución por Categorías",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PieChart,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+                Text(
+                    text = "Distribución por Categorías",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
 
             val sortedCategories = categoryTotals.entries.sortedByDescending { it.value }
             for ((category, amount) in sortedCategories) {
                 val percentage = if (totalSalary > 0) (amount.toFloat() / totalSalary.toFloat()) else 0f
                 val catColor = CategoryVisuals.getColor(category)
+                val catIcon = CategoryVisuals.getIcon(category)
 
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Box(
                                 modifier = Modifier
-                                    .size(10.dp)
+                                    .size(24.dp)
                                     .clip(CircleShape)
-                                    .background(catColor)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
+                                    .background(catColor.copy(alpha = 0.14f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = catIcon,
+                                    contentDescription = null,
+                                    tint = catColor,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = category,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "${viewModel.formatCurrency(amount)} (${String.format(Locale.US, "%.1f", percentage * 100)}%)",
                             style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
@@ -617,34 +684,52 @@ private fun Rule503020Card(
             modifier = Modifier.padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = "Tu Presupuesto vs Regla 50 / 30 / 20",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Balance,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+                Text(
+                    text = "Tu Presupuesto vs Regla 50 / 30 / 20",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            val needsGood = needsPct <= 50.0
+            val wantsGood = wantsPct <= 30.0
+            val savingsGood = savingsDebtPct >= 20.0
 
             Rule503020Row(
                 title = "Necesidades Básicas (Meta: ≤50%)",
-                actualPct = String.format(Locale.US, "%.1f", needsPct),
                 actualAmount = viewModel.formatCurrency(needs),
-                status = "✅ Excelente (${String.format(Locale.US, "%.1f", needsPct)}%)",
-                isGood = needsPct <= 50.0
+                pctText = "${String.format(Locale.US, "%.1f", needsPct)}%",
+                statusIcon = if (needsGood) Icons.Default.CheckCircle else Icons.Default.WarningAmber,
+                statusDescription = if (needsGood) "Excelente (${String.format(Locale.US, "%.1f", needsPct)}%)" else "Por encima de meta (${String.format(Locale.US, "%.1f", needsPct)}%)",
+                isGood = needsGood
             )
 
             Rule503020Row(
                 title = "Estilo de Vida y Ocio (Meta: ≤30%)",
-                actualPct = String.format(Locale.US, "%.1f", wantsPct),
                 actualAmount = viewModel.formatCurrency(wants),
-                status = "✅ Muy controlado (${String.format(Locale.US, "%.1f", wantsPct)}%)",
-                isGood = wantsPct <= 30.0
+                pctText = "${String.format(Locale.US, "%.1f", wantsPct)}%",
+                statusIcon = if (wantsGood) Icons.Default.CheckCircle else Icons.Default.WarningAmber,
+                statusDescription = if (wantsGood) "Muy controlado (${String.format(Locale.US, "%.1f", wantsPct)}%)" else "Por encima de meta (${String.format(Locale.US, "%.1f", wantsPct)}%)",
+                isGood = wantsGood
             )
 
             Rule503020Row(
                 title = "Ahorros y Desendeudamiento (Meta: ≥20%)",
-                actualPct = String.format(Locale.US, "%.1f", savingsDebtPct),
                 actualAmount = viewModel.formatCurrency(savingsAndDebt),
-                status = "🚀 Alto enfoque (${String.format(Locale.US, "%.1f", savingsDebtPct)}%)",
-                isGood = true
+                pctText = "${String.format(Locale.US, "%.1f", savingsDebtPct)}%",
+                statusIcon = if (savingsGood) Icons.Default.RocketLaunch else Icons.Default.WarningAmber,
+                statusDescription = if (savingsGood) "Alto enfoque (${String.format(Locale.US, "%.1f", savingsDebtPct)}%)" else "Por debajo de meta (${String.format(Locale.US, "%.1f", savingsDebtPct)}%)",
+                isGood = savingsGood
             )
         }
     }
@@ -653,33 +738,57 @@ private fun Rule503020Card(
 @Composable
 private fun Rule503020Row(
     title: String,
-    actualPct: String,
     actualAmount: String,
-    status: String,
+    pctText: String,
+    statusIcon: ImageVector,
+    statusDescription: String,
     isGood: Boolean
 ) {
+    val statusColor = if (isGood) Color(0xFF16A34A) else MaterialTheme.colorScheme.error
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
             .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
                 text = title,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp),
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = MaterialTheme.colorScheme.onSurface
             )
-            Text(
-                text = status,
-                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                color = if (isGood) Color(0xFF16A34A) else MaterialTheme.colorScheme.error
-            )
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = statusColor.copy(alpha = 0.12f),
+                modifier = Modifier.semantics { contentDescription = statusDescription }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = statusIcon,
+                        contentDescription = null,
+                        tint = statusColor,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = pctText,
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                        color = statusColor
+                    )
+                }
+            }
         }
         Text(
             text = "Total actual: $actualAmount",

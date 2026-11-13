@@ -29,7 +29,8 @@ service cloud.firestore {
              data.currency is string && data.currency.size() >= 2 && data.currency.size() <= 10 &&
              (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 120)) &&
              (!('customCategories' in data) || (data.customCategories is list && data.customCategories.size() <= 50)) &&
-             (!('showSavingsTab' in data) || data.showSavingsTab is bool);
+             (!('showSavingsTab' in data) || data.showSavingsTab is bool) &&
+             (!('hiddenTabs' in data) || (data.hiddenTabs is list && data.hiddenTabs.size() <= 10));
     }
 
     function isValidMonthlyBudget(data) {
@@ -147,7 +148,7 @@ service cloud.firestore {
                        request.auth.uid == userId &&
                        incoming().userId == request.auth.uid &&
                        incoming().keys().hasAll(['userId', 'monthlySalary', 'currency', 'createdAt', 'updatedAt']) &&
-                       incoming().keys().hasOnly(['userId', 'monthlySalary', 'currency', 'displayName', 'customCategories', 'showSavingsTab', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'monthlySalary', 'currency', 'displayName', 'customCategories', 'showSavingsTab', 'hiddenTabs', 'createdAt', 'updatedAt']) &&
                        incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
                        incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
                        isValidUserProfile(incoming());
@@ -158,7 +159,7 @@ service cloud.firestore {
                        incoming().createdAt == existing().createdAt &&
                        incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
                        isValidUserProfile(incoming()) &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['monthlySalary', 'currency', 'displayName', 'customCategories', 'showSavingsTab', 'updatedAt']);
+                       incoming().diff(existing()).affectedKeys().hasOnly(['monthlySalary', 'currency', 'displayName', 'customCategories', 'showSavingsTab', 'hiddenTabs', 'updatedAt']);
 
       allow delete: if isSignedIn() && request.auth.uid == userId;
 

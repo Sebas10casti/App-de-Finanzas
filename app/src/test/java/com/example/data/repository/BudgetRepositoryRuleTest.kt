@@ -30,6 +30,18 @@ class BudgetRepositoryRuleTest : FirestoreEmulatorTestBase() {
     }
     assertNotNull(profile)
     assertEquals(0L, profile?.monthlySalary)
+    assertTrue(profile?.hiddenTabs?.isEmpty() == true)
+
+    val hiddenResult = withTimeout(DEFAULT_TIMEOUT_MS) {
+      repo.updateHiddenTabs(listOf("METRICS", "AI_ADVISOR", "SETTINGS"))
+    }
+    assertTrue(hiddenResult.isSuccess)
+
+    val updatedProfile = withTimeout(FLOW_TIMEOUT_MS) {
+      repo.observeUserProfile().first { it != null && it.hiddenTabs.size == 2 }
+    }
+    assertEquals(listOf("METRICS", "AI_ADVISOR"), updatedProfile?.hiddenTabs)
+    assertTrue(updatedProfile?.showSavingsTab == true)
   }
 
   @Test
@@ -46,6 +58,78 @@ class BudgetRepositoryRuleTest : FirestoreEmulatorTestBase() {
       repo.observeMonthItems("2026-11").first { it.isNotEmpty() }
     }
     assertTrue(items.any { it.name.contains("Arriendo") })
+  }
+
+  @Test
+  fun paidStatus_andRecurringFlag_persistAndDeserializeFromFirestore() = runBlocking {
+    signInTestUser(ALICE_EMAIL)
+    val repo = BudgetRepository(firestore)
+
+    withTimeout(DEFAULT_TIMEOUT_MS) {
+      repo.ensureMonthInitialized("2026-12", 11300000L)
+    }.getOrThrow()
+
+    val oneOffId = withTimeout(DEFAULT_TIMEOUT_MS) {
+      repo.addItem(
+        BudgetItem(
+          monthKey = "2026-12",
+          name = "Gasto Único",
+          amount = 250000L,
+          category = "Otros",
+          isPaid = false,
+          isRecurring = false
+        )
+      )
+    }.getOrThrow()
+
+    val initialItems = withTimeout(FLOW_TIMEOUT_MS) {
+      repo.observeMonthItems("2026-12").first { list -> list.any { it.id == oneOffId } }
+    }
+    val oneOffItem = initialItems.first { it.id == oneOffId }
+    assertEquals(false, oneOffItem.isRecurring)
+    assertEquals(false, oneOffItem.isPaid)
+
+    val secondItem = initialItems.first { it.id != oneOffId }
+
+    withTimeout(DEFAULT_TIMEOUT_MS) {
+      repo.toggleItemPaid(oneOffItem)
+    }.getOrThrow()
+    withTimeout(DEFAULT_TIMEOUT_MS) {
+      repo.markItemsPaid("2026-12", true, listOf(secondItem.id))
+    }.getOrThrow()
+
+    // Simulate a fresh repository read (as after app restart)
+    val freshRepo = BudgetRepository(firestore)
+    val reloaded = withTimeout(FLOW_TIMEOUT_MS) {
+      freshRepo.observeMonthItems("2026-12").first { list ->
+        list.firstOrNull { it.id == oneOffId }?.isPaid == true &&
+          list.firstOrNull { it.id == secondItem.id }?.isPaid == true
+      }
+    }
+    assertEquals(true, reloaded.first { it.id == oneOffId }.isPaid)
+    assertEquals(false, reloaded.first { it.id == oneOffId }.isRecurring)
+    assertEquals(true, reloaded.first { it.id == secondItem.id }.isPaid)
+
+    val walletLikeId = withTimeout(DEFAULT_TIMEOUT_MS) {
+      freshRepo.addItem(
+        BudgetItem(
+          monthKey = "2026-12",
+          name = "Juan Valdez",
+          amount = 14500L,
+          category = "Gastos personales",
+          isPaid = true,
+          isRecurring = false,
+          notes = "Registrado automáticamente desde Google Wallet"
+        )
+      )
+    }.getOrThrow()
+
+    val walletReloaded = withTimeout(FLOW_TIMEOUT_MS) {
+      freshRepo.observeMonthItems("2026-12").first { list -> list.any { it.id == walletLikeId } }
+    }.first { it.id == walletLikeId }
+    assertEquals(true, walletReloaded.isPaid)
+    assertEquals(false, walletReloaded.isRecurring)
+    assertNotNull(walletReloaded.paidAt)
   }
 
   @Test

@@ -4,9 +4,13 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.BuildConfig
 import com.example.data.model.PocketMovement
 import com.example.data.model.SavingsPocket
+import com.example.data.repository.SavingsDataSource
 import com.example.data.repository.SavingsRepository
+import com.example.dev.DevSavingsRepository
+import com.example.dev.DevTesterAccount
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestoreException
@@ -35,7 +39,8 @@ data class SavingsUiSummary(
 )
 
 class SavingsViewModel(
-    private val repository: SavingsRepository
+    private val repository: SavingsDataSource,
+    private val currentUserIdProvider: () -> String = { Firebase.auth.currentUser?.uid ?: "" }
 ) : ViewModel() {
 
     private val copFormat = NumberFormat.getCurrencyInstance(Locale("es", "CO")).apply {
@@ -102,7 +107,7 @@ class SavingsViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    fun currentUserId(): String = Firebase.auth.currentUser?.uid ?: ""
+    fun currentUserId(): String = currentUserIdProvider()
 
     fun selectPocket(pocketId: String?) {
         _selectedPocketId.value = pocketId
@@ -281,10 +286,23 @@ class SavingsViewModel(
         }
     }
 
-    class Factory(private val context: Context) : ViewModelProvider.Factory {
+    class Factory(
+        private val context: Context,
+        private val devAccount: DevTesterAccount? = null
+    ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return SavingsViewModel(SavingsRepository(context)) as T
+            return if (BuildConfig.DEBUG && devAccount != null) {
+                SavingsViewModel(
+                    repository = DevSavingsRepository(devAccount),
+                    currentUserIdProvider = { devAccount.uid }
+                ) as T
+            } else {
+                SavingsViewModel(
+                    repository = SavingsRepository(context),
+                    currentUserIdProvider = { Firebase.auth.currentUser?.uid ?: "" }
+                ) as T
+            }
         }
     }
 }

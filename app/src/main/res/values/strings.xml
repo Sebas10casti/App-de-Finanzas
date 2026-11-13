@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Mi Presupuesto</string>
+    <string name="wallet_listener_service_name">Lector de pagos Google Wallet</string>
+    <string name="wallet_auto_expense_note">Registrado automáticamente desde Google Wallet</string>
 </resources>

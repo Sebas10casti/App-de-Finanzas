@@ -11,6 +11,7 @@
         "displayName": { "type": "string", "description": "User display name" },
         "customCategories": { "type": "array", "items": { "type": "string" }, "description": "Custom user categories" },
         "showSavingsTab": { "type": "boolean", "description": "Whether the Savings tab is visible in the bottom bar (defaults to true)" },
+        "hiddenTabs": { "type": "array", "items": { "type": "string" }, "description": "Tab keys hidden from the bottom bar (empty means all visible)" },
         "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp via serverTimestamp" },
         "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp via serverTimestamp" }
       },

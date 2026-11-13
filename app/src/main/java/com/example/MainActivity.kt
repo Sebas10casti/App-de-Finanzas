@@ -33,6 +33,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.dev.DevTesterAccount
+import com.example.dev.DevTesterAccounts
 import com.example.ui.screens.AiAdvisorChatScreen
 import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.ChecklistScreen
@@ -75,10 +77,14 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppRoot() {
     var currentUser by remember { mutableStateOf(Firebase.auth.currentUser) }
+    var devTesterAccount by remember { mutableStateOf<DevTesterAccount?>(null) }
 
     DisposableEffect(Unit) {
         val listener = FirebaseAuth.AuthStateListener { auth ->
             currentUser = auth.currentUser
+            if (auth.currentUser != null) {
+                devTesterAccount = null
+            }
         }
         Firebase.auth.addAuthStateListener(listener)
         onDispose {
@@ -86,16 +92,44 @@ fun AppRoot() {
         }
     }
 
-    if (currentUser == null) {
-        AuthScreen(
-            onAuthSuccess = { currentUser = Firebase.auth.currentUser }
-        )
-    } else {
-        val uid = currentUser!!.uid
-        key(uid) {
-            MainFeatureScreen(
-                currentUserId = uid,
-                onSignOutComplete = { currentUser = null }
+    val activeUser = currentUser
+    val activeDevAccount = if (BuildConfig.DEBUG) devTesterAccount else null
+
+    when {
+        activeUser != null -> {
+            val uid = activeUser.uid
+            key(uid) {
+                MainFeatureScreen(
+                    currentUserId = uid,
+                    devTesterAccount = null,
+                    onSwitchDevTester = {},
+                    onSignOutComplete = { currentUser = null }
+                )
+            }
+        }
+        activeDevAccount != null -> {
+            key(activeDevAccount.uid) {
+                MainFeatureScreen(
+                    currentUserId = activeDevAccount.uid,
+                    devTesterAccount = activeDevAccount,
+                    onSwitchDevTester = {
+                        devTesterAccount = DevTesterAccounts.companionOf(activeDevAccount)
+                    },
+                    onSignOutComplete = { devTesterAccount = null }
+                )
+            }
+        }
+        else -> {
+            AuthScreen(
+                onAuthSuccess = {
+                    devTesterAccount = null
+                    currentUser = Firebase.auth.currentUser
+                },
+                onDevTesterLogin = { account ->
+                    if (BuildConfig.DEBUG) {
+                        devTesterAccount = account
+                    }
+                }
             )
         }
     }
@@ -104,55 +138,79 @@ fun AppRoot() {
 @Composable
 fun MainFeatureScreen(
     currentUserId: String,
+    devTesterAccount: DevTesterAccount? = null,
+    onSwitchDevTester: () -> Unit = {},
     onSignOutComplete: () -> Unit
 ) {
     val context = LocalContext.current
     val budgetViewModel: BudgetViewModel = viewModel(
         key = currentUserId,
-        factory = BudgetViewModel.Factory(context)
+        factory = BudgetViewModel.Factory(context, devTesterAccount)
     )
     val savingsViewModel: SavingsViewModel = viewModel(
         key = "${currentUserId}_savings",
-        factory = SavingsViewModel.Factory(context)
+        factory = SavingsViewModel.Factory(context, devTesterAccount)
     )
-    val showSavingsTab by budgetViewModel.showSavingsTab.collectAsState()
-    val visibleTabs = remember(showSavingsTab) {
-        NavTab.entries.filter { it != NavTab.SAVINGS || showSavingsTab }
+    val hiddenTabs by budgetViewModel.hiddenTabs.collectAsState()
+    val visibleTabs = remember(hiddenTabs) {
+        NavTab.entries.filter { it == NavTab.SETTINGS || it.name !in hiddenTabs }
     }
 
     var currentTab by remember { mutableStateOf(NavTab.CHECKLIST) }
+    var isSettingsOverlayOpen by remember { mutableStateOf(false) }
 
-    LaunchedEffect(showSavingsTab) {
-        if (!showSavingsTab && currentTab == NavTab.SAVINGS) {
-            currentTab = NavTab.CHECKLIST
+    LaunchedEffect(visibleTabs) {
+        if (currentTab !in visibleTabs) {
+            if (currentTab == NavTab.SETTINGS) {
+                isSettingsOverlayOpen = true
+            }
+            currentTab = visibleTabs.first()
+        } else if (isSettingsOverlayOpen && NavTab.SETTINGS in visibleTabs) {
+            currentTab = NavTab.SETTINGS
+            isSettingsOverlayOpen = false
         }
     }
 
-    // Handle back button to return to home tab if on secondary tab
-    BackHandler(enabled = currentTab != NavTab.CHECKLIST) {
-        currentTab = NavTab.CHECKLIST
+    val homeTab = visibleTabs.first()
+
+    // Close Settings shortcut overlay first, or return to the first visible tab
+    BackHandler(enabled = isSettingsOverlayOpen || currentTab != homeTab) {
+        if (isSettingsOverlayOpen) {
+            isSettingsOverlayOpen = false
+        } else {
+            currentTab = homeTab
+        }
     }
+
+    val openSettingsShortcut: (() -> Unit)? = if (NavTab.SETTINGS !in visibleTabs) {
+        { isSettingsOverlayOpen = true }
+    } else null
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
-            NavigationBar(
-                modifier = Modifier.testTag("main_navigation_bar")
-            ) {
-                for (tab in visibleTabs) {
-                    val isSelected = currentTab == tab
-                    NavigationBarItem(
-                        selected = isSelected,
-                        onClick = { currentTab = tab },
-                        icon = {
-                            Icon(
-                                imageVector = tab.icon,
-                                contentDescription = tab.title
-                            )
-                        },
-                        label = { Text(text = tab.title, maxLines = 1) },
-                        modifier = Modifier.testTag(tab.tag)
-                    )
+            if (visibleTabs.size > 1) {
+                NavigationBar(
+                    modifier = Modifier.testTag("main_navigation_bar")
+                ) {
+                    for (tab in visibleTabs) {
+                        val isSelected = !isSettingsOverlayOpen && currentTab == tab
+                        NavigationBarItem(
+                            selected = isSelected,
+                            onClick = {
+                                isSettingsOverlayOpen = false
+                                currentTab = tab
+                            },
+                            icon = {
+                                Icon(
+                                    imageVector = tab.icon,
+                                    contentDescription = tab.title
+                                )
+                            },
+                            label = { Text(text = tab.title, maxLines = 1) },
+                            modifier = Modifier.testTag(tab.tag)
+                        )
+                    }
                 }
             }
         }
@@ -162,15 +220,36 @@ fun MainFeatureScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            when (currentTab) {
-                NavTab.CHECKLIST -> ChecklistScreen(viewModel = budgetViewModel)
-                NavTab.SAVINGS -> SavingsScreen(viewModel = savingsViewModel)
-                NavTab.METRICS -> FinancialMetricsScreen(viewModel = budgetViewModel)
-                NavTab.AI_ADVISOR -> AiAdvisorChatScreen(viewModel = budgetViewModel)
-                NavTab.SETTINGS -> SettingsScreen(
+            if (isSettingsOverlayOpen || currentTab == NavTab.SETTINGS) {
+                SettingsScreen(
                     viewModel = budgetViewModel,
-                    onSignOutComplete = onSignOutComplete
+                    onSignOutComplete = onSignOutComplete,
+                    devTesterAccount = devTesterAccount,
+                    onSwitchDevTester = onSwitchDevTester,
+                    onBack = if (NavTab.SETTINGS !in visibleTabs) {
+                        { isSettingsOverlayOpen = false }
+                    } else null
                 )
+            } else {
+                when (currentTab) {
+                    NavTab.CHECKLIST -> ChecklistScreen(
+                        viewModel = budgetViewModel,
+                        onOpenSettings = openSettingsShortcut
+                    )
+                    NavTab.SAVINGS -> SavingsScreen(
+                        viewModel = savingsViewModel,
+                        onOpenSettings = openSettingsShortcut
+                    )
+                    NavTab.METRICS -> FinancialMetricsScreen(
+                        viewModel = budgetViewModel,
+                        onOpenSettings = openSettingsShortcut
+                    )
+                    NavTab.AI_ADVISOR -> AiAdvisorChatScreen(
+                        viewModel = budgetViewModel,
+                        onOpenSettings = openSettingsShortcut
+                    )
+                    NavTab.SETTINGS -> Unit
+                }
             }
         }
     }

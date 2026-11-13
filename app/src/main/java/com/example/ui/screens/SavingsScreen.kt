@@ -23,16 +23,22 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Savings
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -55,6 +61,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -69,7 +76,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun SavingsScreen(
-    viewModel: SavingsViewModel
+    viewModel: SavingsViewModel,
+    onOpenSettings: (() -> Unit)? = null
 ) {
     val pockets by viewModel.pockets.collectAsState()
     val summary by viewModel.summary.collectAsState()
@@ -138,17 +146,37 @@ fun SavingsScreen(
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     item {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(
-                                text = "Ahorros & Bolsillos",
-                                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                            Text(
-                                text = "Bolsillos independientes y metas compartidas con tu pareja",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    text = "Ahorros & Bolsillos",
+                                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
+                                Text(
+                                    text = "Bolsillos independientes y metas compartidas con tu pareja",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (onOpenSettings != null) {
+                                IconButton(
+                                    onClick = onOpenSettings,
+                                    modifier = Modifier.testTag("btn_open_settings_shortcut")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings,
+                                        contentDescription = "Abrir Ajustes"
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -314,14 +342,33 @@ private fun SavingsSummaryCard(
                 modifier = Modifier.padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = "TOTAL AHORRADO",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.9.sp
-                    ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Savings,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Text(
+                        text = "TOTAL AHORRADO",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.9.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
                 Text(
                     text = formatCurrency(summary.totalSaved),
@@ -339,11 +386,13 @@ private fun SavingsSummaryCard(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         SummaryStatPill(
+                            icon = Icons.Default.Person,
                             label = "Personales (${summary.pocketCount - summary.sharedCount})",
                             amount = formatCurrency(summary.personalSaved),
                             modifier = Modifier.weight(1f)
                         )
                         SummaryStatPill(
+                            icon = Icons.Default.Group,
                             label = "Compartidos (${summary.sharedCount})",
                             amount = formatCurrency(summary.sharedSaved),
                             modifier = Modifier.weight(1f)
@@ -351,52 +400,83 @@ private fun SavingsSummaryCard(
                     }
                 }
 
-                Column(
+                var shareMenuExpanded by remember { mutableStateOf(false) }
+
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Button(
                         onClick = onCreateClick,
                         modifier = Modifier
-                            .fillMaxWidth()
+                            .weight(1f)
                             .heightIn(min = 48.dp)
                             .testTag("btn_new_pocket"),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Nuevo bolsillo")
+                        Text("Nuevo bolsillo", maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
+                    Box {
                         FilledTonalButton(
-                            onClick = onInviteClick,
-                            enabled = hasOwnedPockets,
+                            onClick = { shareMenuExpanded = true },
                             modifier = Modifier
-                                .weight(1f)
                                 .heightIn(min = 48.dp)
-                                .testTag("btn_invite_to_pocket"),
+                                .testTag("btn_share_pocket_menu"),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Group, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Invitar", maxLines = 1)
+                            Text("Compartir", maxLines = 1)
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = "Opciones para compartir",
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
 
-                        OutlinedButton(
-                            onClick = onJoinClick,
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 48.dp)
-                                .testTag("btn_join_pocket_code"),
-                            shape = RoundedCornerShape(12.dp)
+                        DropdownMenu(
+                            expanded = shareMenuExpanded,
+                            onDismissRequest = { shareMenuExpanded = false }
                         ) {
-                            Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Unirse", maxLines = 1)
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text("Invitar a un bolsillo")
+                                        if (!hasOwnedPockets) {
+                                            Text(
+                                                text = "Crea un bolsillo primero",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.PersonAdd, contentDescription = null)
+                                },
+                                enabled = hasOwnedPockets,
+                                onClick = {
+                                    shareMenuExpanded = false
+                                    onInviteClick()
+                                },
+                                modifier = Modifier.testTag("menu_item_invite_pocket")
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Unirse con código") },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Key, contentDescription = null)
+                                },
+                                onClick = {
+                                    shareMenuExpanded = false
+                                    onJoinClick()
+                                },
+                                modifier = Modifier.testTag("menu_item_join_pocket")
+                            )
                         }
                     }
                 }
@@ -407,6 +487,7 @@ private fun SavingsSummaryCard(
 
 @Composable
 private fun SummaryStatPill(
+    icon: ImageVector,
     label: String,
     amount: String,
     modifier: Modifier = Modifier
@@ -416,21 +497,41 @@ private fun SummaryStatPill(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = amount,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = amount,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -535,13 +636,25 @@ private fun PocketListCard(
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Meta: ${formatCurrency(target)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Flag,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = "Meta: ${formatCurrency(target)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         Text(
                             text = "$pct%",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),

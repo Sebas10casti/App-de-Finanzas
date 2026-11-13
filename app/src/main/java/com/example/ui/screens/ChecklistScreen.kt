@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,19 +31,31 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Balance
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Celebration
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.TaskAlt
+import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -79,10 +92,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -94,7 +109,8 @@ import java.time.YearMonth
 
 @Composable
 fun ChecklistScreen(
-    viewModel: BudgetViewModel
+    viewModel: BudgetViewModel,
+    onOpenSettings: (() -> Unit)? = null
 ) {
     val currentYearMonth by viewModel.currentYearMonth.collectAsState()
     val availableMonths = remember { viewModel.getAvailableMonths() }
@@ -109,6 +125,7 @@ fun ChecklistScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var itemToEdit by remember { mutableStateOf<BudgetItem?>(null) }
     var itemToDelete by remember { mutableStateOf<BudgetItem?>(null) }
+    var itemToMarkPending by remember { mutableStateOf<BudgetItem?>(null) }
     var showMarkAllDialog by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -148,16 +165,25 @@ fun ChecklistScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
                             Text(
-                                text = "${selectedItemIds.size} ítem(s) seleccionado(s)",
+                                text = if (selectedItemIds.size == 1) "1 seleccionado" else "${selectedItemIds.size} seleccionados",
                                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = "Total: ${viewModel.formatCurrency(selectedTotalAmount)}",
                                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.primary
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
 
@@ -165,11 +191,26 @@ fun ChecklistScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            TextButton(
+                            IconButton(
                                 onClick = { viewModel.clearPaymentSelection() },
-                                modifier = Modifier.testTag("btn_cancel_payment_selection")
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .testTag("btn_cancel_payment_selection")
                             ) {
-                                Text("Cancelar")
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.14f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Cancelar selección",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
 
                             Button(
@@ -178,7 +219,9 @@ fun ChecklistScreen(
                                     containerColor = Color(0xFF16A34A),
                                     contentColor = Color.White
                                 ),
-                                modifier = Modifier.testTag("btn_confirm_mark_paid")
+                                modifier = Modifier
+                                    .heightIn(min = 48.dp)
+                                    .testTag("btn_confirm_mark_paid")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Check,
@@ -187,8 +230,9 @@ fun ChecklistScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Marcar Pagados (${selectedItemIds.size})",
-                                    fontWeight = FontWeight.Bold
+                                    text = if (selectedItemIds.size == 1) "Marcar Pagado" else "Marcar Pagados",
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
                                 )
                             }
                         }
@@ -211,6 +255,7 @@ fun ChecklistScreen(
                 onPrevious = { viewModel.previousMonth() },
                 onNext = { viewModel.nextMonth() },
                 onToday = { viewModel.setCurrentMonth() },
+                onOpenSettings = onOpenSettings,
                 viewModel = viewModel
             )
 
@@ -259,7 +304,13 @@ fun ChecklistScreen(
                             item = item,
                             isSelectedForPayment = isSelectedForPayment,
                             onToggleSelectForPayment = { viewModel.toggleSelectItemForPayment(item.id) },
-                            onTogglePaidDirectly = { viewModel.toggleItemPaid(item) },
+                            onTogglePaidDirectly = {
+                                if (item.isPaid) {
+                                    itemToMarkPending = item
+                                } else {
+                                    viewModel.toggleItemPaid(item)
+                                }
+                            },
                             onEdit = { itemToEdit = item },
                             onDelete = { itemToDelete = item },
                             viewModel = viewModel
@@ -325,6 +376,45 @@ fun ChecklistScreen(
         )
     }
 
+    // Confirm Reverting Paid Item back to Pending
+    itemToMarkPending?.let { item ->
+        AlertDialog(
+            onDismissRequest = { itemToMarkPending = null },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.WarningAmber,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = { Text("¿Marcar como pendiente?") },
+            text = {
+                Text(
+                    "¿Seguro que deseas desmarcar '${item.name}' (${viewModel.formatCurrency(item.amount)}) como pagado y devolverlo a pendiente?"
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.toggleItemPaid(item)
+                        itemToMarkPending = null
+                    },
+                    modifier = Modifier.testTag("btn_confirm_mark_pending")
+                ) {
+                    Text("Sí, marcar pendiente")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { itemToMarkPending = null },
+                    modifier = Modifier.testTag("btn_cancel_mark_pending")
+                ) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
     // Mark All Confirmation Dialog
     if (showMarkAllDialog) {
         AlertDialog(
@@ -383,6 +473,7 @@ private fun MonthNavigator(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onToday: () -> Unit,
+    onOpenSettings: (() -> Unit)? = null,
     viewModel: BudgetViewModel
 ) {
     val isTodayMonth = currentYearMonth == YearMonth.now()
@@ -448,14 +539,27 @@ private fun MonthNavigator(
                     }
                 }
 
-                IconButton(
-                    onClick = onNext,
-                    modifier = Modifier.testTag("btn_next_month")
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = "Mes siguiente"
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onNext,
+                        modifier = Modifier.testTag("btn_next_month")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = "Mes siguiente"
+                        )
+                    }
+                    if (onOpenSettings != null) {
+                        IconButton(
+                            onClick = onOpenSettings,
+                            modifier = Modifier.testTag("btn_open_settings_shortcut")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "Abrir Ajustes"
+                            )
+                        }
+                    }
                 }
             }
 
@@ -539,13 +643,16 @@ private fun BudgetSummaryCard(
             modifier = Modifier.padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Header: Icon + Title + Status Pill
+            // Header: Icon + Title + Emoji Status Pill
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Box(
                         modifier = Modifier
                             .size(36.dp)
@@ -564,39 +671,65 @@ private fun BudgetSummaryCard(
                     Text(
                         text = "Resumen del Presupuesto",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
+                Spacer(modifier = Modifier.width(8.dp))
+
+                val statusLabel = if (isPositiveFree) "En Equilibrio" else "Déficit"
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (isPositiveFree) Color(0xFFDCFCE7) else MaterialTheme.colorScheme.errorContainer
+                    shape = CircleShape,
+                    color = if (isPositiveFree) Color(0xFFDCFCE7) else MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .testTag("budget_status_badge")
+                        .semantics { contentDescription = statusLabel }
                 ) {
-                    Text(
-                        text = if (isPositiveFree) "En Equilibrio" else "Déficit",
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = if (isPositiveFree) Color(0xFF15803D) else MaterialTheme.colorScheme.onErrorContainer
-                    )
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (isPositiveFree) Icons.Default.Balance else Icons.Default.WarningAmber,
+                            contentDescription = null,
+                            tint = if (isPositiveFree) Color(0xFF15803D) else MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
 
             // Big Bold Free Cash Highlight
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(freeColor.copy(alpha = 0.08f))
-                    .padding(horizontal = 16.dp, vertical = 14.dp)
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                color = freeColor.copy(alpha = 0.08f),
+                border = BorderStroke(1.dp, freeColor.copy(alpha = 0.2f))
             ) {
-                Text(
-                    text = "DINERO LIBRE DISPONIBLE",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isPositiveFree) Icons.AutoMirrored.Filled.TrendingUp else Icons.Default.TrendingDown,
+                            contentDescription = null,
+                            tint = freeColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "DINERO LIBRE DISPONIBLE",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            ),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -616,6 +749,7 @@ private fun BudgetSummaryCard(
                         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                         color = freeColor
                     )
+                }
                 }
             }
 
@@ -692,16 +826,38 @@ private fun BudgetSummaryCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Pagado: ${viewModel.formatCurrency(totalPaid)} ($paidCount/$totalCount)",
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                        color = Color(0xFF16A34A)
-                    )
-                    Text(
-                        text = "Pendiente: ${viewModel.formatCurrency(totalPending)}",
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = Color(0xFF16A34A),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "Pagado: ${viewModel.formatCurrency(totalPaid)} ($paidCount/$totalCount)",
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                            color = Color(0xFF16A34A)
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Schedule,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "Pendiente: ${viewModel.formatCurrency(totalPending)}",
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
 
                 LinearProgressIndicator(
@@ -716,7 +872,8 @@ private fun BudgetSummaryCard(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = "${(progressFraction * 100).toInt()}% completado",
@@ -724,11 +881,22 @@ private fun BudgetSummaryCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     if (paidCount == totalCount && totalCount > 0) {
-                        Text(
-                            text = "🎉 ¡Todo liquidado!",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = Color(0xFF16A34A)
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Celebration,
+                                contentDescription = null,
+                                tint = Color(0xFF16A34A),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = "¡Todo liquidado!",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = Color(0xFF16A34A)
+                            )
+                        }
                     } else {
                         Text(
                             text = "Quedan ${totalCount - paidCount} pagos por realizar",
@@ -763,6 +931,13 @@ private fun FilterControls(
                     selected = currentStatus == ItemStatusFilter.TODOS,
                     onClick = { onStatusChange(ItemStatusFilter.TODOS) },
                     label = { Text("Todos") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.FormatListBulleted,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
                     )
@@ -771,6 +946,13 @@ private fun FilterControls(
                     selected = currentStatus == ItemStatusFilter.PENDIENTES,
                     onClick = { onStatusChange(ItemStatusFilter.PENDIENTES) },
                     label = { Text("Pendientes") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Schedule,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
                     )
@@ -779,6 +961,13 @@ private fun FilterControls(
                     selected = currentStatus == ItemStatusFilter.PAGADOS,
                     onClick = { onStatusChange(ItemStatusFilter.PAGADOS) },
                     label = { Text("Pagados") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
                     )
@@ -807,24 +996,29 @@ private fun FilterControls(
             FilterChip(
                 selected = selectedCategory == null,
                 onClick = { onCategorySelect(null) },
-                label = { Text("Todas las categorías") }
+                label = { Text("Todas las categorías") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Category,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             )
             for (category in allCategories) {
                 val catColor = CategoryVisuals.getColor(category)
+                val catIcon = CategoryVisuals.getIcon(category)
                 FilterChip(
                     selected = selectedCategory == category,
                     onClick = { onCategorySelect(if (selectedCategory == category) null else category) },
-                    label = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(catColor)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(category)
-                        }
+                    label = { Text(category) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = catIcon,
+                            contentDescription = null,
+                            tint = catColor,
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
                 )
             }
@@ -854,12 +1048,16 @@ private fun BudgetItemRow(
 
     val cardBorder = when {
         isSelectedForPayment -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
-        else -> null
+        else -> BorderStroke(0.8.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.22f))
     }
 
     val cardBackgroundColor = when {
-        isSelectedForPayment -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
-        item.isPaid -> MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)
+        isSelectedForPayment -> MaterialTheme.colorScheme.primaryContainer
+            .copy(alpha = 0.28f)
+            .compositeOver(MaterialTheme.colorScheme.surface)
+        item.isPaid -> MaterialTheme.colorScheme.surfaceVariant
+            .copy(alpha = 0.30f)
+            .compositeOver(MaterialTheme.colorScheme.surface)
         else -> MaterialTheme.colorScheme.surface
     }
 
@@ -870,7 +1068,7 @@ private fun BudgetItemRow(
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = cardBackgroundColor),
         border = cardBorder,
-        elevation = CardDefaults.cardElevation(defaultElevation = if (item.isPaid) 1.dp else 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
@@ -924,142 +1122,190 @@ private fun BudgetItemRow(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // Item Name and Category / Recurrence Badges
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.name,
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        textDecoration = if (item.isPaid) TextDecoration.LineThrough else TextDecoration.None
-                    ),
-                    color = if (item.isPaid) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f) else MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+            // Item Name, Category / Badges, and Price Below
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = item.name,
+                        modifier = Modifier.weight(1f, fill = false),
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = if (item.isPaid) {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    if (item.isPaid) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = "Pagado",
+                            tint = Color(0xFF16A34A),
+                            modifier = Modifier
+                                .size(18.dp)
+                                .testTag("icon_paid_${item.id}")
+                        )
+                    }
+                }
 
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
                         text = item.category,
+                        modifier = Modifier.weight(1f, fill = false),
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
 
-                    // One-time or Monthly Recurrence badge
+                    // Recurrence or Selected indicator icons/badges
                     if (!item.isRecurring) {
                         Surface(
                             shape = RoundedCornerShape(4.dp),
                             color = Color(0xFFFEF3C7)
                         ) {
-                            Text(
-                                text = "Solo este mes",
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
-                                color = Color(0xFFB45309)
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Event,
+                                    contentDescription = null,
+                                    tint = Color(0xFFB45309),
+                                    modifier = Modifier.size(10.dp)
+                                )
+                                Text(
+                                    text = "Solo este mes",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = Color(0xFFB45309),
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
                         }
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Repeat,
+                            contentDescription = "Pago mensual recurrente",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.size(13.dp)
+                        )
                     }
 
-                    if (item.isPaid) {
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = Color(0xFFDCFCE7)
-                        ) {
-                            Text(
-                                text = "✓ Pagado",
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                color = Color(0xFF15803D)
-                            )
-                        }
-                    } else if (isSelectedForPayment) {
+                    if (!item.isPaid && isSelectedForPayment) {
                         Surface(
                             shape = RoundedCornerShape(4.dp),
                             color = MaterialTheme.colorScheme.primaryContainer
                         ) {
-                            Text(
-                                text = "Seleccionado",
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.TaskAlt,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(10.dp)
+                                )
+                                Text(
+                                    text = "Seleccionado",
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            // Amount & Options Menu
-            Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = viewModel.formatCurrency(item.amount),
                     style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        textDecoration = if (item.isPaid) TextDecoration.LineThrough else TextDecoration.None
+                        fontWeight = FontWeight.Bold
                     ),
-                    color = if (item.isPaid) Color(0xFF16A34A) else MaterialTheme.colorScheme.onSurface
+                    color = if (item.isPaid) Color(0xFF16A34A) else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+            }
 
-                Box {
-                    IconButton(
-                        onClick = { menuExpanded = true },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = "Opciones",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
+            // Options Menu
+            Box {
+                IconButton(
+                    onClick = { menuExpanded = true },
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "Opciones",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    if (item.isPaid) {
+                        DropdownMenuItem(
+                            text = { Text("Marcar como pendiente") },
+                            leadingIcon = { Icon(Icons.Default.RadioButtonUnchecked, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onTogglePaidDirectly()
+                            }
+                        )
+                    } else {
+                        DropdownMenuItem(
+                            text = { Text("Marcar como pagado ya") },
+                            leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF16A34A)) },
+                            onClick = {
+                                menuExpanded = false
+                                onTogglePaidDirectly()
+                            }
                         )
                     }
-
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false }
-                    ) {
-                        if (item.isPaid) {
-                            DropdownMenuItem(
-                                text = { Text("Marcar como pendiente") },
-                                leadingIcon = { Icon(Icons.Default.RadioButtonUnchecked, contentDescription = null) },
-                                onClick = {
-                                    menuExpanded = false
-                                    onTogglePaidDirectly()
-                                }
-                            )
-                        } else {
-                            DropdownMenuItem(
-                                text = { Text("Marcar como pagado ya") },
-                                leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF16A34A)) },
-                                onClick = {
-                                    menuExpanded = false
-                                    onTogglePaidDirectly()
-                                }
-                            )
+                    DropdownMenuItem(
+                        text = { Text("Editar") },
+                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                        onClick = {
+                            menuExpanded = false
+                            onEdit()
                         }
-                        DropdownMenuItem(
-                            text = { Text("Editar") },
-                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
-                            onClick = {
-                                menuExpanded = false
-                                onEdit()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Eliminar", color = MaterialTheme.colorScheme.error) },
-                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                            onClick = {
-                                menuExpanded = false
-                                onDelete()
-                            }
-                        )
-                    }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Eliminar", color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                        onClick = {
+                            menuExpanded = false
+                            onDelete()
+                        }
+                    )
                 }
             }
         }

@@ -25,7 +25,7 @@ import kotlinx.coroutines.tasks.await
 import java.security.SecureRandom
 import java.util.Date
 
-class SavingsRepository(private val db: FirebaseFirestore) {
+class SavingsRepository(private val db: FirebaseFirestore) : SavingsDataSource {
 
     constructor(context: Context) : this(
         FirebaseFirestore.getInstance(
@@ -49,7 +49,7 @@ class SavingsRepository(private val db: FirebaseFirestore) {
             ?: "Usuario"
     }
 
-    fun observePockets(): Flow<List<SavingsPocket>> = flow {
+    override fun observePockets(): Flow<List<SavingsPocket>> = flow {
         val uid = requireUserId()
         val path = "savingsPockets"
         emitAll(
@@ -77,7 +77,7 @@ class SavingsRepository(private val db: FirebaseFirestore) {
         )
     }
 
-    fun observeMovements(pocketId: String): Flow<List<PocketMovement>> = flow {
+    override fun observeMovements(pocketId: String): Flow<List<PocketMovement>> = flow {
         val uid = requireUserId()
         val path = "savingsPockets/$pocketId/movements"
         emitAll(
@@ -105,7 +105,7 @@ class SavingsRepository(private val db: FirebaseFirestore) {
         )
     }
 
-    suspend fun createPocket(
+    override suspend fun createPocket(
         name: String,
         initialAmount: Long,
         targetAmount: Long?,
@@ -157,7 +157,7 @@ class SavingsRepository(private val db: FirebaseFirestore) {
         }
     }
 
-    suspend fun updatePocketDetails(
+    override suspend fun updatePocketDetails(
         pocketId: String,
         name: String,
         targetAmount: Long?,
@@ -184,7 +184,7 @@ class SavingsRepository(private val db: FirebaseFirestore) {
         }
     }
 
-    suspend fun recordMovement(
+    override suspend fun recordMovement(
         pocketId: String,
         type: String,
         amount: Long,
@@ -249,7 +249,7 @@ class SavingsRepository(private val db: FirebaseFirestore) {
         }
     }
 
-    suspend fun generateOrRegenerateShareCode(pocket: SavingsPocket): Result<String> {
+    override suspend fun generateOrRegenerateShareCode(pocket: SavingsPocket): Result<String> {
         val uid = requireUserId()
         if (pocket.ownerId != uid) {
             return Result.failure(IllegalStateException("Solo el creador puede gestionar códigos de invitación."))
@@ -300,7 +300,7 @@ class SavingsRepository(private val db: FirebaseFirestore) {
         }
     }
 
-    suspend fun deactivateShareCode(pocket: SavingsPocket): Result<Unit> {
+    override suspend fun deactivateShareCode(pocket: SavingsPocket): Result<Unit> {
         val uid = requireUserId()
         if (pocket.ownerId != uid) {
             return Result.failure(IllegalStateException("Solo el creador puede desactivar el código."))
@@ -330,7 +330,7 @@ class SavingsRepository(private val db: FirebaseFirestore) {
         }
     }
 
-    suspend fun joinPocketByCode(rawCode: String): Result<String> {
+    override suspend fun joinPocketByCode(rawCode: String): Result<String> {
         val uid = requireUserId()
         val displayName = currentDisplayName()
         val normalizedCode = normalizeCode(rawCode)
@@ -383,7 +383,7 @@ class SavingsRepository(private val db: FirebaseFirestore) {
         }
     }
 
-    suspend fun leavePocket(pocketId: String): Result<Unit> {
+    override suspend fun leavePocket(pocketId: String): Result<Unit> {
         val uid = requireUserId()
         val pocketDoc = db.collection("savingsPockets").document(pocketId)
         return try {
@@ -403,7 +403,7 @@ class SavingsRepository(private val db: FirebaseFirestore) {
         }
     }
 
-    suspend fun removeMember(pocket: SavingsPocket, memberUid: String): Result<Unit> {
+    override suspend fun removeMember(pocket: SavingsPocket, memberUid: String): Result<Unit> {
         val uid = requireUserId()
         if (pocket.ownerId != uid || memberUid == uid) {
             return Result.failure(IllegalStateException("No puedes realizar esta acción."))
@@ -426,7 +426,7 @@ class SavingsRepository(private val db: FirebaseFirestore) {
         }
     }
 
-    suspend fun deletePocket(pocket: SavingsPocket): Result<Unit> {
+    override suspend fun deletePocket(pocket: SavingsPocket): Result<Unit> {
         val uid = requireUserId()
         if (pocket.ownerId != uid) {
             return Result.failure(IllegalStateException("Solo el creador puede eliminar este bolsillo."))

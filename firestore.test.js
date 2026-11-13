@@ -56,6 +56,19 @@ test("Authenticated user: can create and read their own profile", async () => {
     })
   );
   await assertSucceeds(aliceDb.collection("users").doc(ALICE_UID).get());
+  await assertSucceeds(
+    aliceDb.collection("users").doc(ALICE_UID).update({
+      hiddenTabs: ["METRICS", "AI_ADVISOR"],
+      showSavingsTab: true,
+      updatedAt: new Date(),
+    })
+  );
+  await assertFails(
+    aliceDb.collection("users").doc(ALICE_UID).update({
+      hiddenTabs: "METRICS",
+      updatedAt: new Date(),
+    })
+  );
 });
 
 test("Authenticated user: cannot read another user's profile", async () => {

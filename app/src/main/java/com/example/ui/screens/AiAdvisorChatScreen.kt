@@ -20,12 +20,19 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SupportAgent
+import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -57,10 +64,13 @@ import com.example.ui.viewmodel.BudgetViewModel
 
 @Composable
 fun AiAdvisorChatScreen(
-    viewModel: BudgetViewModel
+    viewModel: BudgetViewModel,
+    onOpenSettings: (() -> Unit)? = null
 ) {
     val messages by viewModel.chatMessages.collectAsState()
     val isSending by viewModel.isSendingChat.collectAsState()
+    val streamingText by viewModel.streamingChatText.collectAsState()
+    val chatError by viewModel.chatErrorMessage.collectAsState()
     val metrics by viewModel.financialMetrics.collectAsState()
     val listState = rememberLazyListState()
     var inputText by remember { mutableStateOf("") }
@@ -72,6 +82,7 @@ fun AiAdvisorChatScreen(
     }
 
     val suggestedQuestions = listOf(
+        "¿Qué gastos podría reducir o eliminar este mes?",
         "¿Cuál de mis deudas debería liquidar primero?",
         "¿Cómo optimizo mi retención en la fuente con mi pensión voluntaria?",
         "¿En qué cuenta de alto rendimiento me conviene guardar mi dinero?",
@@ -79,10 +90,11 @@ fun AiAdvisorChatScreen(
         freeCashSuggestion
     )
 
-    // Scroll to bottom when new messages arrive
-    LaunchedEffect(messages.size, isSending) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
+    // Scroll to bottom when new messages or streaming chunks arrive
+    LaunchedEffect(messages.size, isSending, streamingText?.length, chatError) {
+        val total = listState.layoutInfo.totalItemsCount
+        if (total > 0) {
+            listState.animateScrollToItem(total - 1)
         }
     }
 
@@ -123,23 +135,37 @@ fun AiAdvisorChatScreen(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Gemini 3.5 Flash Lite • Asesor Financiero Gratuito",
+                                text = "Gemini 3.5 Flash-Lite • Asesor Financiero Personal",
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
 
-                    if (messages.isNotEmpty()) {
-                        IconButton(
-                            onClick = { viewModel.clearChat() },
-                            modifier = Modifier.testTag("btn_clear_chat")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.DeleteSweep,
-                                contentDescription = "Limpiar conversación",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (messages.isNotEmpty()) {
+                            IconButton(
+                                onClick = { viewModel.clearChat() },
+                                modifier = Modifier.testTag("btn_clear_chat")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DeleteSweep,
+                                    contentDescription = "Limpiar conversación",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        if (onOpenSettings != null) {
+                            IconButton(
+                                onClick = onOpenSettings,
+                                modifier = Modifier.testTag("btn_open_settings_shortcut")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "Abrir Ajustes",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
@@ -296,9 +322,29 @@ fun AiAdvisorChatScreen(
                         ChatMessageBubble(message = msg)
                     }
 
-                    if (isSending) {
+                    if (!streamingText.isNullOrBlank()) {
+                        item {
+                            ChatMessageBubble(
+                                message = ChatMessage(
+                                    id = "streaming_preview",
+                                    role = "model",
+                                    text = streamingText!!
+                                )
+                            )
+                        }
+                    } else if (isSending) {
                         item {
                             TypingIndicatorBubble()
+                        }
+                    }
+
+                    if (!chatError.isNullOrBlank() && !isSending) {
+                        item {
+                            ChatErrorBanner(
+                                message = chatError!!,
+                                onRetry = { viewModel.retryLastChatMessage() },
+                                onDismiss = { viewModel.dismissChatError() }
+                            )
                         }
                     }
                 }
@@ -417,6 +463,86 @@ private fun TypingIndicatorBubble() {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatErrorBanner(
+    message: String,
+    onRetry: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("chat_error_banner"),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.WarningAmber,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Cerrar aviso",
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Button(
+                    onClick = onRetry,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    ),
+                    modifier = Modifier.testTag("btn_retry_chat")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Reintentar")
+                }
             }
         }
     }

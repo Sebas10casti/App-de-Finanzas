@@ -30,7 +30,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 
-class BudgetRepository(private val db: FirebaseFirestore) {
+class BudgetRepository(private val db: FirebaseFirestore) : BudgetDataSource {
 
     constructor(context: Context) : this(
         FirebaseFirestore.getInstance(
@@ -47,7 +47,7 @@ class BudgetRepository(private val db: FirebaseFirestore) {
     }
 
     // Observe User Profile
-    fun observeUserProfile(): Flow<UserProfile?> = flow {
+    override fun observeUserProfile(): Flow<UserProfile?> = flow {
         val uid = requireUserId()
         val path = "users/$uid"
         emitAll(
@@ -71,7 +71,7 @@ class BudgetRepository(private val db: FirebaseFirestore) {
     }
 
     // Ensure Profile and Default Templates exist
-    suspend fun ensureProfileAndDefaults(): Result<Unit> {
+    override suspend fun ensureProfileAndDefaults(): Result<Unit> {
         val uid = requireUserId()
         val userDoc = db.collection("users").document(uid)
         return try {
@@ -118,7 +118,7 @@ class BudgetRepository(private val db: FirebaseFirestore) {
     }
 
     // Update Salary in Profile
-    suspend fun updateSalary(newSalary: Long): Result<Unit> {
+    override suspend fun updateSalary(newSalary: Long): Result<Unit> {
         val uid = requireUserId()
         val userDoc = db.collection("users").document(uid)
         return try {
@@ -138,7 +138,7 @@ class BudgetRepository(private val db: FirebaseFirestore) {
     }
 
     // Update Custom Categories in Profile
-    suspend fun updateCustomCategories(categories: List<String>): Result<Unit> {
+    override suspend fun updateCustomCategories(categories: List<String>): Result<Unit> {
         val uid = requireUserId()
         val userDoc = db.collection("users").document(uid)
         return try {
@@ -158,13 +158,48 @@ class BudgetRepository(private val db: FirebaseFirestore) {
     }
 
     // Update Savings Tab Visibility in Profile
-    suspend fun updateShowSavingsTab(enabled: Boolean): Result<Unit> {
+    override suspend fun updateShowSavingsTab(enabled: Boolean): Result<Unit> {
         val uid = requireUserId()
         val userDoc = db.collection("users").document(uid)
         return try {
+            val snapshot = userDoc.get().await()
+            val currentHidden = (snapshot.get("hiddenTabs") as? List<*>)
+                ?.filterIsInstance<String>()
+                ?.toMutableList()
+                ?: mutableListOf()
+            if (enabled) {
+                currentHidden.removeAll { it == "SAVINGS" }
+            } else if ("SAVINGS" !in currentHidden) {
+                currentHidden.add("SAVINGS")
+            }
             userDoc.update(
                 mapOf(
                     "showSavingsTab" to enabled,
+                    "hiddenTabs" to currentHidden.distinct(),
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, userDoc.path)
+            Result.failure(e)
+        }
+    }
+
+    // Update configurable hidden tabs list in Profile
+    override suspend fun updateHiddenTabs(hiddenTabs: List<String>): Result<Unit> {
+        val uid = requireUserId()
+        val userDoc = db.collection("users").document(uid)
+        val cleanHidden = hiddenTabs
+            .filterNot { it.equals("SETTINGS", ignoreCase = true) }
+            .distinct()
+        return try {
+            userDoc.update(
+                mapOf(
+                    "hiddenTabs" to cleanHidden,
+                    "showSavingsTab" to ("SAVINGS" !in cleanHidden),
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             ).await()
@@ -178,9 +213,9 @@ class BudgetRepository(private val db: FirebaseFirestore) {
     }
 
     // Find all distinct items currently using a given category across months & templates
-    suspend fun findItemsUsingCategory(
+    override suspend fun findItemsUsingCategory(
         categoryName: String,
-        currentMonthItems: List<BudgetItem> = emptyList()
+        currentMonthItems: List<BudgetItem>
     ): Result<List<CategoryUsageItem>> {
         val uid = requireUserId()
         val userDoc = db.collection("users").document(uid)
@@ -258,10 +293,10 @@ class BudgetRepository(private val db: FirebaseFirestore) {
     }
 
     // Reassign all items using oldCategory across all months and templateItems
-    suspend fun reassignCategoryAcrossAllMonths(
+    override suspend fun reassignCategoryAcrossAllMonths(
         oldCategory: String,
         reassignmentsByNormalizedName: Map<String, String>,
-        fallbackCategory: String? = null
+        fallbackCategory: String?
     ): Result<Unit> {
         val uid = requireUserId()
         val userDoc = db.collection("users").document(uid)
@@ -328,7 +363,7 @@ class BudgetRepository(private val db: FirebaseFirestore) {
     }
 
     // Observe Monthly Budget
-    fun observeMonthlyBudget(monthKey: String): Flow<MonthlyBudget?> = flow {
+    override fun observeMonthlyBudget(monthKey: String): Flow<MonthlyBudget?> = flow {
         val uid = requireUserId()
         val path = "users/$uid/months/$monthKey"
         emitAll(
@@ -352,7 +387,7 @@ class BudgetRepository(private val db: FirebaseFirestore) {
     }
 
     // Observe Items for a Given Month
-    fun observeMonthItems(monthKey: String): Flow<List<BudgetItem>> = flow {
+    override fun observeMonthItems(monthKey: String): Flow<List<BudgetItem>> = flow {
         val uid = requireUserId()
         val path = "users/$uid/months/$monthKey/items"
         emitAll(
@@ -374,7 +409,7 @@ class BudgetRepository(private val db: FirebaseFirestore) {
     }
 
     // Ensure Month is initialized with items
-    suspend fun ensureMonthInitialized(monthKey: String, currentSalary: Long): Result<Unit> {
+    override suspend fun ensureMonthInitialized(monthKey: String, currentSalary: Long): Result<Unit> {
         val uid = requireUserId()
         val monthDoc = db.collection("users").document(uid).collection("months").document(monthKey)
         return try {
@@ -443,7 +478,7 @@ class BudgetRepository(private val db: FirebaseFirestore) {
     }
 
     // Toggle Item Paid status
-    suspend fun toggleItemPaid(item: BudgetItem): Result<Unit> {
+    override suspend fun toggleItemPaid(item: BudgetItem): Result<Unit> {
         val uid = requireUserId()
         require(item.id.isNotBlank()) { "Item ID cannot be blank" }
         val itemDoc = db.collection("users").document(uid)
@@ -468,7 +503,7 @@ class BudgetRepository(private val db: FirebaseFirestore) {
     }
 
     // Add new item to a month
-    suspend fun addItem(item: BudgetItem): Result<String> {
+    override suspend fun addItem(item: BudgetItem): Result<String> {
         val uid = requireUserId()
         val itemsCol = db.collection("users").document(uid)
             .collection("months").document(item.monthKey)
@@ -484,6 +519,7 @@ class BudgetRepository(private val db: FirebaseFirestore) {
             "createdAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp()
         )
+        if (item.isPaid) map["paidAt"] = FieldValue.serverTimestamp()
         if (!item.isRecurring) map["isRecurring"] = false
         if (item.notes != null) map["notes"] = item.notes
         return try {
@@ -498,7 +534,7 @@ class BudgetRepository(private val db: FirebaseFirestore) {
     }
 
     // Update item
-    suspend fun updateItem(item: BudgetItem): Result<Unit> {
+    override suspend fun updateItem(item: BudgetItem): Result<Unit> {
         val uid = requireUserId()
         require(item.id.isNotBlank()) { "Item ID cannot be blank" }
         val itemDoc = db.collection("users").document(uid)
@@ -526,7 +562,7 @@ class BudgetRepository(private val db: FirebaseFirestore) {
     }
 
     // Delete item
-    suspend fun deleteItem(item: BudgetItem): Result<Unit> {
+    override suspend fun deleteItem(item: BudgetItem): Result<Unit> {
         val uid = requireUserId()
         require(item.id.isNotBlank()) { "Item ID cannot be blank" }
         val itemDoc = db.collection("users").document(uid)
@@ -544,7 +580,7 @@ class BudgetRepository(private val db: FirebaseFirestore) {
     }
 
     // Mark all items as paid/unpaid
-    suspend fun markAllItemsPaid(monthKey: String, isPaid: Boolean, items: List<BudgetItem>): Result<Unit> {
+    override suspend fun markAllItemsPaid(monthKey: String, isPaid: Boolean, items: List<BudgetItem>): Result<Unit> {
         val uid = requireUserId()
         val itemsCol = db.collection("users").document(uid)
             .collection("months").document(monthKey)
@@ -576,7 +612,7 @@ class BudgetRepository(private val db: FirebaseFirestore) {
     }
 
     // Mark specific item IDs as paid/unpaid
-    suspend fun markItemsPaid(monthKey: String, isPaid: Boolean, itemIds: List<String>): Result<Unit> {
+    override suspend fun markItemsPaid(monthKey: String, isPaid: Boolean, itemIds: List<String>): Result<Unit> {
         if (itemIds.isEmpty()) return Result.success(Unit)
         val uid = requireUserId()
         val itemsCol = db.collection("users").document(uid)
@@ -607,7 +643,7 @@ class BudgetRepository(private val db: FirebaseFirestore) {
     }
 
     // Chat Messages
-    fun observeChatMessages(): Flow<List<ChatMessage>> = flow {
+    override fun observeChatMessages(): Flow<List<ChatMessage>> = flow {
         val uid = requireUserId()
         val path = "users/$uid/chatMessages"
         emitAll(
@@ -633,10 +669,10 @@ class BudgetRepository(private val db: FirebaseFirestore) {
         )
     }
 
-    suspend fun addChatMessage(
+    override suspend fun addChatMessage(
         role: String,
         text: String,
-        messageId: String? = null
+        messageId: String?
     ): Result<Unit> {
         val uid = requireUserId()
         val chatCol = db.collection("users").document(uid).collection("chatMessages")
@@ -658,7 +694,7 @@ class BudgetRepository(private val db: FirebaseFirestore) {
         }
     }
 
-    suspend fun clearChatMessages(messages: List<ChatMessage>): Result<Unit> {
+    override suspend fun clearChatMessages(messages: List<ChatMessage>): Result<Unit> {
         val uid = requireUserId()
         val chatCol = db.collection("users").document(uid).collection("chatMessages")
         return try {

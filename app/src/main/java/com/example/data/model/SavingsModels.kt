@@ -3,6 +3,7 @@ package com.example.data.model
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.IgnoreExtraProperties
+import com.google.firebase.firestore.PropertyName
 import com.google.firebase.firestore.ServerTimestamp
 
 @IgnoreExtraProperties
@@ -48,6 +49,8 @@ data class PocketInvite(
     val pocketName: String = "",
     val ownerId: String = "",
     val ownerName: String = "",
+    @get:PropertyName("isActive")
+    @field:PropertyName("isActive")
     val isActive: Boolean = true,
     val expiresAt: Timestamp? = null,
     @ServerTimestamp val createdAt: Timestamp? = null

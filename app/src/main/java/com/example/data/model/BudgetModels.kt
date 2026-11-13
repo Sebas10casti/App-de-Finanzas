@@ -3,6 +3,7 @@ package com.example.data.model
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.IgnoreExtraProperties
+import com.google.firebase.firestore.PropertyName
 import com.google.firebase.firestore.ServerTimestamp
 
 @IgnoreExtraProperties
@@ -14,6 +15,7 @@ data class UserProfile(
     val displayName: String = "",
     val customCategories: List<String> = emptyList(),
     val showSavingsTab: Boolean = true,
+    val hiddenTabs: List<String> = emptyList(),
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )
@@ -36,7 +38,11 @@ data class BudgetItem(
     val name: String = "",
     val amount: Long = 0L,
     val category: String = "Otros",
+    @get:PropertyName("isPaid")
+    @field:PropertyName("isPaid")
     val isPaid: Boolean = false,
+    @get:PropertyName("isRecurring")
+    @field:PropertyName("isRecurring")
     val isRecurring: Boolean = true, // true = fixed monthly expense, false = one-off this month
     @ServerTimestamp val paidAt: Timestamp? = null,
     val notes: String? = null,
@@ -51,6 +57,8 @@ data class TemplateItem(
     val name: String = "",
     val amount: Long = 0L,
     val category: String = "Otros",
+    @get:PropertyName("isRecurring")
+    @field:PropertyName("isRecurring")
     val isRecurring: Boolean = true,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null

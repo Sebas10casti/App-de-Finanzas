@@ -4,13 +4,17 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.BuildConfig
 import com.example.ai.FinancialAiService
 import com.example.data.model.BudgetCategories
 import com.example.data.model.BudgetItem
 import com.example.data.model.CategoryUsageItem
 import com.example.data.model.ChatMessage
 import com.example.data.model.UserProfile
+import com.example.data.repository.BudgetDataSource
 import com.example.data.repository.BudgetRepository
+import com.example.dev.DevBudgetRepository
+import com.example.dev.DevTesterAccount
 import com.google.firebase.Timestamp
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -74,7 +78,7 @@ data class FinancialCalculations(
 )
 
 class BudgetViewModel(
-    private val repository: BudgetRepository,
+    private val repository: BudgetDataSource,
     private val aiService: FinancialAiService = FinancialAiService()
 ) : ViewModel() {
 
@@ -97,6 +101,9 @@ class BudgetViewModel(
     private val _isSendingChat = MutableStateFlow(false)
     val isSendingChat: StateFlow<Boolean> = _isSendingChat.asStateFlow()
 
+    private val _streamingChatText = MutableStateFlow<String?>(null)
+    val streamingChatText: StateFlow<String?> = _streamingChatText.asStateFlow()
+
     private val _chatErrorMessage = MutableStateFlow<String?>(null)
     val chatErrorMessage: StateFlow<String?> = _chatErrorMessage.asStateFlow()
 
@@ -116,8 +123,19 @@ class BudgetViewModel(
     val userProfile: StateFlow<UserProfile?> = repository.observeUserProfile()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
-    val showSavingsTab: StateFlow<Boolean> = userProfile
-        .map { it?.showSavingsTab ?: true }
+    val hiddenTabs: StateFlow<Set<String>> = userProfile
+        .map { profile ->
+            if (profile == null) {
+                emptySet()
+            } else {
+                val explicit = profile.hiddenTabs.toSet() - "SETTINGS"
+                if (!profile.showSavingsTab) explicit + "SAVINGS" else explicit
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptySet())
+
+    val showSavingsTab: StateFlow<Boolean> = hiddenTabs
+        .map { "SAVINGS" !in it }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), true)
 
     // Dynamic list of all categories (active defaults + user custom categories, excluding deleted)
@@ -421,6 +439,26 @@ class BudgetViewModel(
         }
     }
 
+    fun setTabVisible(tabKey: String, visible: Boolean, allTabKeys: List<String>) {
+        if (tabKey == "SETTINGS") return
+        val currentHidden = hiddenTabs.value - "SETTINGS"
+        val updatedHidden = if (visible) {
+            currentHidden - tabKey
+        } else {
+            (currentHidden + tabKey) - "SETTINGS"
+        }
+        viewModelScope.launch {
+            repository.updateHiddenTabs(updatedHidden.toList())
+        }
+    }
+
+    fun showAllTabs() {
+        if (hiddenTabs.value.isEmpty()) return
+        viewModelScope.launch {
+            repository.updateHiddenTabs(emptyList())
+        }
+    }
+
     // Category Management
     fun addCategory(categoryName: String) {
         val trimmed = categoryName.trim()
@@ -615,84 +653,94 @@ class BudgetViewModel(
         // 1. Immediately display user message in UI with the exact ID used in Firestore
         _localChatMessages.update { it + userMsg }
         _isSendingChat.value = true
+        _streamingChatText.value = null
         _chatErrorMessage.value = null
 
         viewModelScope.launch {
-            // Asynchronously persist user message using the same deterministic document ID
-            repository.addChatMessage(role = "user", text = cleanText, messageId = userMsgId)
-
-            // 2. Query Gemini
-            val salary = userProfile.value?.monthlySalary ?: 11300000L
-            val items = monthItems.value
-            val result = aiService.sendChatMessage(cleanText, historyBeforeCurrent, salary, items)
-
-            val replyText = if (result.isSuccess) {
-                result.getOrThrow()
-            } else {
-                val err = result.exceptionOrNull()?.localizedMessage ?: "Conexión limitada"
-                _chatErrorMessage.value = err
-                // Fallback expert financial guidance tailored to Colombian context
-                generateFallbackFinancialAdvice(cleanText, salary, items)
+            // Persist user message in parallel so it does not block the AI request
+            launch {
+                repository.addChatMessage(role = "user", text = cleanText, messageId = userMsgId)
             }
 
-            val modelMsgId = UUID.randomUUID().toString()
-            val modelMsg = ChatMessage(
-                id = modelMsgId,
-                role = "model",
-                text = replyText,
-                createdAt = Timestamp.now()
+            requestAiReply(
+                userQuestion = cleanText,
+                historyBeforeQuestion = historyBeforeCurrent
             )
-            _localChatMessages.update { it + modelMsg }
-            repository.addChatMessage(role = "model", text = replyText, messageId = modelMsgId)
-            _isSendingChat.value = false
         }
     }
 
-    private fun generateFallbackFinancialAdvice(question: String, salary: Long, items: List<BudgetItem>): String {
-        val totalExpenses = items.sumOf { it.amount }
-        val free = salary - totalExpenses
-        val lower = question.lowercase()
+    fun retryLastChatMessage() {
+        if (_isSendingChat.value) return
+        val messages = chatMessages.value
+        val lastUserIdx = messages.indexOfLast { it.role == "user" }
+        if (lastUserIdx < 0) return
+        val lastUserMsg = messages[lastUserIdx]
+        val historyBeforeQuestion = messages.take(lastUserIdx)
 
-        return when {
-            lower.contains("deuda") || lower.contains("liquidar") || lower.contains("pagar") -> {
-                """
-                📊 **Estrategia recomendada para tus deudas:**
-                1. **Método Avalancha / Bola de Nieve:** Identifica la deuda con mayor tasa de interés (como tu Tarjeta de Crédito Rappi) y asigna abonos extraordinarios de tu dinero libre (${formatCurrency(free)}).
-                2. Para el crédito de la moto ($1.600.000 COP/mes), continúa con las cuotas puntuales y ahorra el excedente para abono a capital que reduzca el plazo.
-                3. Evita diferir compras en más de 1 cuota en tarjeta de crédito.
-                """.trimIndent()
-            }
-            lower.contains("fvp") || lower.contains("retencion") || lower.contains("impuesto") || lower.contains("pension") -> {
-                """
-                💡 **Optimización Tributaria (Estatuto Tributario Art. 126-1):**
-                - Tus aportes a Fondo de Pensión Voluntaria (FVP) son rentas exentas hasta el 30% de tu ingreso laboral (límite 3.800 UVT).
-                - Si aportas periódicamente al FVP, tu empresa disminuye la base gravable para la retención en la fuente mensual, ahorrándote dinero legalmente.
-                - Además, tu medicina prepagada es deducible hasta 16 UVT mensuales.
-                """.trimIndent()
-            }
-            lower.contains("cuenta") || lower.contains("guardar") || lower.contains("rendimiento") || lower.contains("emergencia") -> {
-                """
-                🏦 **Cuentas de Alto Rendimiento en Colombia:**
-                - Para tu fondo de emergencia y dinero libre (${formatCurrency(free)}), utiliza cuentas con rendimientos diarios efectivos anuales (E.A.) competitivos como las 'cajitas' de Nu, bolsillos de Lulo Bank, Pibank o Ualá.
-                - Tienen liquidez 24/7 y seguro de depósitos FOGAFÍN hasta por $50.000.000 COP.
-                """.trimIndent()
-            }
-            else -> {
-                """
-                💼 **Diagnóstico para tu consulta:**
-                - Sueldo actual: ${formatCurrency(salary)}
-                - Total gastos registrados: ${formatCurrency(totalExpenses)}
-                - Dinero disponible: ${formatCurrency(free)}
+        _isSendingChat.value = true
+        _streamingChatText.value = null
+        _chatErrorMessage.value = null
 
-                Recomendación clave: Con ${formatCurrency(free)} libres este mes, el paso ideal es destinar el 50% ($${free / 2 / 1000}k) a un fondo de ahorro o abono a capital, y el 50% restante a tus metas personales y ocio planificado.
-                """.trimIndent()
+        viewModelScope.launch {
+            requestAiReply(
+                userQuestion = lastUserMsg.text,
+                historyBeforeQuestion = historyBeforeQuestion
+            )
+        }
+    }
+
+    fun dismissChatError() {
+        _chatErrorMessage.value = null
+    }
+
+    private suspend fun requestAiReply(
+        userQuestion: String,
+        historyBeforeQuestion: List<ChatMessage>
+    ) {
+        val salary = userProfile.value?.monthlySalary ?: 11300000L
+        val items = monthItems.value
+        val monthLabel = getMonthDisplayTitle()
+
+        try {
+            var finalReply = ""
+            aiService.streamChatMessage(
+                userMessage = userQuestion,
+                history = historyBeforeQuestion,
+                currentSalary = salary,
+                items = items,
+                monthLabel = monthLabel
+            ).collect { partial ->
+                finalReply = partial
+                _streamingChatText.value = partial
             }
+
+            if (finalReply.isNotBlank()) {
+                val modelMsgId = UUID.randomUUID().toString()
+                val modelMsg = ChatMessage(
+                    id = modelMsgId,
+                    role = "model",
+                    text = finalReply,
+                    createdAt = Timestamp.now()
+                )
+                _localChatMessages.update { it + modelMsg }
+                repository.addChatMessage(role = "model", text = finalReply, messageId = modelMsgId)
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _chatErrorMessage.value = e.localizedMessage
+                ?: "No se pudo conectar con Gemini AI. Intenta de nuevo."
+        } finally {
+            _streamingChatText.value = null
+            _isSendingChat.value = false
         }
     }
 
     fun clearChat() {
         val snapshot = chatMessages.value
         _localChatMessages.value = emptyList()
+        _streamingChatText.value = null
+        _chatErrorMessage.value = null
         viewModelScope.launch {
             repository.clearChatMessages(snapshot)
         }
@@ -705,10 +753,17 @@ class BudgetViewModel(
         return format.format(amount)
     }
 
-    class Factory(private val context: Context) : ViewModelProvider.Factory {
+    class Factory(
+        private val context: Context,
+        private val devAccount: DevTesterAccount? = null
+    ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            val repo = BudgetRepository(context)
+            val repo: BudgetDataSource = if (BuildConfig.DEBUG && devAccount != null) {
+                DevBudgetRepository(devAccount)
+            } else {
+                BudgetRepository(context)
+            }
             return BudgetViewModel(repo) as T
         }
     }
