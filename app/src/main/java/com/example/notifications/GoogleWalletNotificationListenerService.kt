@@ -143,6 +143,6 @@ class GoogleWalletNotificationListenerService : NotificationListenerService() {
 
     companion object {
         private const val TAG = "WalletNotifListener"
-        private const val DEFAULT_SALARY_COP = 11300000L
+        private const val DEFAULT_SALARY_COP = 0L
     }
 }

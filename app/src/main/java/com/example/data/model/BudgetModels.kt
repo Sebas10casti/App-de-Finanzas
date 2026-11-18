@@ -25,7 +25,7 @@ data class MonthlyBudget(
     @DocumentId val id: String = "",
     val userId: String = "",
     val monthKey: String = "", // e.g. "2026-11"
-    val salary: Long = 11300000L,
+    val salary: Long = 0L,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )
@@ -79,7 +79,7 @@ data class CategoryUsageItem(
     val occurrences: Int = 1
 )
 
-// Categories used in Sebas's Excel file
+// Default expense categories
 object BudgetCategories {
     const val DELETED_PREFIX = "!DEL:"
     const val GASTOS_HOGAR = "Gastos Hogar"
@@ -105,39 +105,30 @@ object BudgetCategories {
     )
 }
 
-// Default items exactly from Sebas's Excel sheet
+// Fictional sample items used only in Debug tester/demo mode
 data class DefaultItemDef(
     val name: String,
     val amount: Long,
     val category: String
 )
 
-val SEBAS_DEFAULT_ITEMS = listOf(
-    DefaultItemDef("Arriendo", 1400000L, BudgetCategories.GASTOS_HOGAR),
-    DefaultItemDef("Luz", 90000L, BudgetCategories.SERVICIOS_PUBLICOS),
-    DefaultItemDef("Agua", 90000L, BudgetCategories.SERVICIOS_PUBLICOS),
-    DefaultItemDef("Gas", 10000L, BudgetCategories.SERVICIOS_PUBLICOS),
-    DefaultItemDef("Internet", 100000L, BudgetCategories.SERVICIOS_PUBLICOS),
-    DefaultItemDef("Mercado", 700000L, BudgetCategories.GASTOS_HOGAR),
-    DefaultItemDef("Datos", 40000L, BudgetCategories.SERVICIOS_PUBLICOS),
-    DefaultItemDef("Ahorro gastos de la moto", 300000L, BudgetCategories.VEHICULO),
-    DefaultItemDef("Medicina prepagada", 340000L, BudgetCategories.DEDUCIBLES_EMPRESA),
-    DefaultItemDef("Retencion en la fuente", 114000L, BudgetCategories.DEDUCIBLES_EMPRESA),
-    DefaultItemDef("Fondo de solidaridad", 100000L, BudgetCategories.DEDUCIBLES_EMPRESA),
-    DefaultItemDef("Salud y Pension", 760000L, BudgetCategories.DEDUCIBLES_EMPRESA),
-    DefaultItemDef("Gym, natación, atletismo", 200000L, BudgetCategories.DEPORTE),
-    DefaultItemDef("Anbu", 120000L, BudgetCategories.GASTOS_HOGAR),
-    DefaultItemDef("Ocio y vida personal", 600000L, BudgetCategories.GASTOS_PERSONALES),
-    DefaultItemDef("Credito Moto", 1600000L, BudgetCategories.DEUDA_CREDITOS),
-    DefaultItemDef("Tarjeta Credito Rappi", 700000L, BudgetCategories.DEUDA_CREDITOS),
-    DefaultItemDef("Fondo pensión voluntaria", 1800000L, BudgetCategories.AHORRO_INVERSION),
-    DefaultItemDef("Cuota Seguro Moto", 200000L, BudgetCategories.GASTOS_HOGAR),
-    DefaultItemDef("Gemini Plan", 20000L, BudgetCategories.SERVICIOS_PUBLICOS),
-    DefaultItemDef("Netflix y youtube music", 40000L, BudgetCategories.SERVICIOS_PUBLICOS),
-    DefaultItemDef("Ahorro Viaje con amor", 100000L, BudgetCategories.GASTOS_PERSONALES),
-    DefaultItemDef("Compras Internet", 200000L, BudgetCategories.GASTOS_PERSONALES),
-    DefaultItemDef("Ahorro emergencia", 300000L, BudgetCategories.GASTOS_HOGAR),
-    DefaultItemDef("Abono Computador Juano", 200000L, BudgetCategories.DEUDA_CREDITOS)
+val DEMO_DEFAULT_ITEMS = listOf(
+    DefaultItemDef("Arriendo apartamento", 1200000L, BudgetCategories.GASTOS_HOGAR),
+    DefaultItemDef("Energía eléctrica", 85000L, BudgetCategories.SERVICIOS_PUBLICOS),
+    DefaultItemDef("Acueducto", 65000L, BudgetCategories.SERVICIOS_PUBLICOS),
+    DefaultItemDef("Gas natural", 25000L, BudgetCategories.SERVICIOS_PUBLICOS),
+    DefaultItemDef("Internet fibra", 90000L, BudgetCategories.SERVICIOS_PUBLICOS),
+    DefaultItemDef("Plan celular", 45000L, BudgetCategories.SERVICIOS_PUBLICOS),
+    DefaultItemDef("Supermercado", 650000L, BudgetCategories.GASTOS_HOGAR),
+    DefaultItemDef("Transporte y combustible", 220000L, BudgetCategories.VEHICULO),
+    DefaultItemDef("Salud y pensión", 420000L, BudgetCategories.DEDUCIBLES_EMPRESA),
+    DefaultItemDef("Gimnasio", 110000L, BudgetCategories.DEPORTE),
+    DefaultItemDef("Crédito vehículo", 650000L, BudgetCategories.DEUDA_CREDITOS),
+    DefaultItemDef("Tarjeta de crédito", 350000L, BudgetCategories.DEUDA_CREDITOS),
+    DefaultItemDef("Ahorro programado", 600000L, BudgetCategories.AHORRO_INVERSION),
+    DefaultItemDef("Fondo de emergencia", 300000L, BudgetCategories.AHORRO_INVERSION),
+    DefaultItemDef("Entretenimiento y streaming", 55000L, BudgetCategories.SERVICIOS_PUBLICOS),
+    DefaultItemDef("Ocio y salidas", 250000L, BudgetCategories.GASTOS_PERSONALES)
 )
 
 val GENERIC_STARTER_ITEMS = listOf(

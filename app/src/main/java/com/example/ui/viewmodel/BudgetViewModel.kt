@@ -63,7 +63,7 @@ enum class ItemStatusFilter {
 }
 
 data class FinancialCalculations(
-    val salary: Long = 11300000L,
+    val salary: Long = 0L,
     val totalBudgeted: Long = 0L,
     val totalPaid: Long = 0L,
     val totalPending: Long = 0L,
@@ -194,7 +194,7 @@ class BudgetViewModel(
         userProfile,
         monthItems
     ) { profile, items ->
-        val salary = profile?.monthlySalary ?: 11300000L
+        val salary = profile?.monthlySalary ?: 0L
         val totalBudgeted = items.sumOf { it.amount }
         val totalPaid = items.filter { it.isPaid }.sumOf { it.amount }
         val totalPending = totalBudgeted - totalPaid
@@ -267,7 +267,7 @@ class BudgetViewModel(
         // Initialize user profile and default 13-month window (-6 to +6)
         viewModelScope.launch {
             repository.ensureProfileAndDefaults()
-            val salary = userProfile.value?.monthlySalary ?: 11300000L
+            val salary = userProfile.value?.monthlySalary ?: 0L
             val currentKey = _currentYearMonth.value.format(monthFormatter)
             repository.ensureMonthInitialized(currentKey, salary)
 
@@ -301,7 +301,7 @@ class BudgetViewModel(
         _optimisticPaidStatus.value = emptyMap()
         _selectedItemIdsForPayment.value = emptySet()
         viewModelScope.launch {
-            val salary = userProfile.value?.monthlySalary ?: 11300000L
+            val salary = userProfile.value?.monthlySalary ?: 0L
             repository.ensureMonthInitialized(ym.format(monthFormatter), salary)
         }
     }
@@ -697,7 +697,7 @@ class BudgetViewModel(
         userQuestion: String,
         historyBeforeQuestion: List<ChatMessage>
     ) {
-        val salary = userProfile.value?.monthlySalary ?: 11300000L
+        val salary = userProfile.value?.monthlySalary ?: 0L
         val items = monthItems.value
         val monthLabel = getMonthDisplayTitle()
 

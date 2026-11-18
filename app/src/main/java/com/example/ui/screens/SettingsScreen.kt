@@ -346,7 +346,7 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = viewModel.formatCurrency(userProfile?.monthlySalary ?: 11300000L),
+                                text = viewModel.formatCurrency(userProfile?.monthlySalary ?: 0L),
                                 style = MaterialTheme.typography.headlineSmall.copy(
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 24.sp
@@ -357,7 +357,7 @@ fun SettingsScreen(
 
                         Button(
                             onClick = {
-                                salaryInput = (userProfile?.monthlySalary ?: 11300000L).toString()
+                                salaryInput = (userProfile?.monthlySalary ?: 0L).toString()
                                 showSalaryDialog = true
                             },
                             modifier = Modifier

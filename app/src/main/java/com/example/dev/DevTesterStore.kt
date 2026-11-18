@@ -3,11 +3,11 @@ package com.example.dev
 import com.example.data.model.BudgetItem
 import com.example.data.model.CategoryUsageItem
 import com.example.data.model.ChatMessage
+import com.example.data.model.DEMO_DEFAULT_ITEMS
 import com.example.data.model.GENERIC_STARTER_ITEMS
 import com.example.data.model.MonthlyBudget
 import com.example.data.model.PocketInvite
 import com.example.data.model.PocketMovement
-import com.example.data.model.SEBAS_DEFAULT_ITEMS
 import com.example.data.model.SavingsPocket
 import com.example.data.model.UserProfile
 import com.example.data.repository.BudgetDataSource
@@ -33,17 +33,17 @@ data class DevTesterAccount(
 object DevTesterAccounts {
     val PRIMARY = DevTesterAccount(
         uid = "dev_tester_1",
-        displayName = "Sebastián Tester",
+        displayName = "Usuario Demo",
         email = "tester1@dev.local",
-        defaultSalary = 11300000L,
+        defaultSalary = 6000000L,
         useRichSeedData = true
     )
 
     val PARTNER = DevTesterAccount(
         uid = "dev_tester_2",
-        displayName = "Pareja Tester",
+        displayName = "Pareja Demo",
         email = "tester2@dev.local",
-        defaultSalary = 6500000L,
+        defaultSalary = 4500000L,
         useRichSeedData = false
     )
 
@@ -268,7 +268,7 @@ class DevBudgetRepository(
         DevSandboxStore.monthItems.update { map ->
             if (map.containsKey(key)) map
             else {
-                val templates = if (account.useRichSeedData) SEBAS_DEFAULT_ITEMS else GENERIC_STARTER_ITEMS
+                val templates = if (account.useRichSeedData) DEMO_DEFAULT_ITEMS else GENERIC_STARTER_ITEMS
                 val seeded = templates.map { def ->
                     BudgetItem(
                         id = UUID.randomUUID().toString(),

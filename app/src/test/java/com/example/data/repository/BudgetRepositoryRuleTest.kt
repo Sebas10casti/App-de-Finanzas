@@ -50,7 +50,7 @@ class BudgetRepositoryRuleTest : FirestoreEmulatorTestBase() {
     val repo = BudgetRepository(firestore)
 
     val result = withTimeout(DEFAULT_TIMEOUT_MS) {
-      repo.ensureMonthInitialized("2026-11", 11300000L)
+      repo.ensureMonthInitialized("2026-11", 5000000L)
     }
     assertTrue(result.isSuccess)
 
@@ -66,7 +66,7 @@ class BudgetRepositoryRuleTest : FirestoreEmulatorTestBase() {
     val repo = BudgetRepository(firestore)
 
     withTimeout(DEFAULT_TIMEOUT_MS) {
-      repo.ensureMonthInitialized("2026-12", 11300000L)
+      repo.ensureMonthInitialized("2026-12", 5000000L)
     }.getOrThrow()
 
     val oneOffId = withTimeout(DEFAULT_TIMEOUT_MS) {

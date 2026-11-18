@@ -5,8 +5,8 @@ import com.example.R
 import com.example.data.model.BudgetItem
 import com.example.data.model.CategoryUsageItem
 import com.example.data.model.ChatMessage
+import com.example.data.model.GENERIC_STARTER_ITEMS
 import com.example.data.model.MonthlyBudget
-import com.example.data.model.SEBAS_DEFAULT_ITEMS
 import com.example.data.model.TemplateItem
 import com.example.data.model.UserProfile
 import com.example.util.OperationType
@@ -77,11 +77,9 @@ class BudgetRepository(private val db: FirebaseFirestore) : BudgetDataSource {
         return try {
             val snapshot = userDoc.get().await()
             if (!snapshot.exists()) {
-                val email = auth.currentUser?.email?.lowercase() ?: ""
-                val isSebas = email.contains("sebas") || email.isEmpty() // Include empty for test suite
-                val initialSalary = if (isSebas) 11300000L else 0L
-                val displayName = auth.currentUser?.displayName ?: if (isSebas) "Sebastián" else "Usuario"
-                val initialItems = if (isSebas) SEBAS_DEFAULT_ITEMS else com.example.data.model.GENERIC_STARTER_ITEMS
+                val initialSalary = 0L
+                val displayName = auth.currentUser?.displayName?.takeIf { it.isNotBlank() } ?: "Usuario"
+                val initialItems = GENERIC_STARTER_ITEMS
 
                 val profileMap = mapOf(
                     "userId" to uid,
@@ -450,8 +448,8 @@ class BudgetRepository(private val db: FirebaseFirestore) : BudgetDataSource {
                         }
                     }
                 } else {
-                    // Populate with Sebas default items
-                    for (def in SEBAS_DEFAULT_ITEMS) {
+                    // Populate with generic starter items
+                    for (def in GENERIC_STARTER_ITEMS) {
                         val itemDoc = itemsCol.document()
                         val itemMap = mapOf(
                             "userId" to uid,

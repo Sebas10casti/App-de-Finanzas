@@ -48,7 +48,7 @@ test("Authenticated user: can create and read their own profile", async () => {
   await assertSucceeds(
     aliceDb.collection("users").doc(ALICE_UID).set({
       userId: ALICE_UID,
-      monthlySalary: 11300000,
+      monthlySalary: 5000000,
       currency: "COP",
       displayName: "Alice",
       createdAt: new Date(),
@@ -93,7 +93,7 @@ test("Authenticated user: can manage items in their own monthly budget", async (
     monthRef.set({
       userId: ALICE_UID,
       monthKey: "2026-11",
-      salary: 11300000,
+      salary: 5000000,
       createdAt: new Date(),
       updatedAt: new Date(),
     })
@@ -123,7 +123,7 @@ test("Ghost field attack: rejected by strict keys", async () => {
   await assertFails(
     aliceDb.collection("users").doc(ALICE_UID).set({
       userId: ALICE_UID,
-      monthlySalary: 11300000,
+      monthlySalary: 5000000,
       currency: "COP",
       ghostField: "malicious",
       createdAt: new Date(),
