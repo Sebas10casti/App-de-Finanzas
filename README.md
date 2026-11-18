@@ -28,37 +28,58 @@ A medida que se fue probando en uso real, el proyecto evolucionó iterativamente
 
 ## Capturas de pantalla
 
+> Todas las capturas utilizan **datos ficticios de demostración** (`Usuario Demo`).
+
 <table>
   <tr>
     <td align="center" width="33%">
-      <img src="docs/screenshots/01_checklist_pagos.png" width="220" alt="Checklist mensual de pagos" /><br />
-      <strong>1. Pagos y Checklist</strong><br />
-      <sub>Resumen del sueldo, dinero libre, progreso de pagos, filtros por estado/categoría e ítems recurrentes.</sub>
+      <img src="docs/screenshots/01_login_bienvenida.png" width="210" alt="Pantalla de bienvenida e inicio de sesión" /><br />
+      <strong>1. Bienvenida y Acceso</strong><br />
+      <sub>Inicio de sesión limpio con Google Sign-In y presentación de beneficios principales.</sub>
     </td>
     <td align="center" width="33%">
-      <img src="docs/screenshots/02_ahorros_bolsillos.png" width="220" alt="Ahorros y bolsillos" /><br />
-      <strong>2. Ahorros & Bolsillos</strong><br />
-      <sub>Metas personales y compartidas con seguimiento porcentual e invitación por código temporal.</sub>
+      <img src="docs/screenshots/02_checklist_resumen.png" width="210" alt="Resumen del presupuesto y checklist mensual" /><br />
+      <strong>2. Resumen del Presupuesto</strong><br />
+      <sub>Sueldo base, dinero libre disponible, barra de progreso mensual y filtros por estado y categoría.</sub>
     </td>
     <td align="center" width="33%">
-      <img src="docs/screenshots/03_finanzas_metricas.png" width="220" alt="Salud de tu sueldo y métricas" /><br />
-      <strong>3. Salud de tu Sueldo</strong><br />
-      <sub>Score financiero, distribución de ahorro/deuda/libre, diagnóstico con IA y recomendaciones prácticas.</sub>
+      <img src="docs/screenshots/03_checklist_seleccion.png" width="210" alt="Selección múltiple de pagos" /><br />
+      <strong>3. Pagos en Lote</strong><br />
+      <sub>Selección múltiple de gastos pendientes con cálculo inmediato del total antes de marcar pagados.</sub>
     </td>
   </tr>
   <tr>
     <td align="center" width="33%">
-      <img src="docs/screenshots/04_asesor_gemini_ai.png" width="220" alt="Asesor Gemini AI" /><br />
-      <strong>4. Asesor Gemini AI</strong><br />
-      <sub>Chat financiero en streaming con contexto real del presupuesto y preguntas rápidas sugeridas.</sub>
+      <img src="docs/screenshots/04_ahorros_bolsillos.png" width="210" alt="Ahorros y bolsillos compartidos" /><br />
+      <strong>4. Ahorros & Bolsillos</strong><br />
+      <sub>Metas personales y compartidas con avance porcentual e invitación por código temporal.</sub>
     </td>
     <td align="center" width="33%">
-      <img src="docs/screenshots/05_ajustes_wallet.png" width="220" alt="Configuración y Google Wallet" /><br />
-      <strong>5. Ajustes y Google Wallet</strong><br />
-      <sub>Edición de sueldo base, lector exclusivo de Google Wallet, pestañas visibles y gestión de categorías.</sub>
+      <img src="docs/screenshots/05_finanzas_score.png" width="210" alt="Salud de tu sueldo y score financiero" /><br />
+      <strong>5. Salud de tu Sueldo</strong><br />
+      <sub>Score financiero, distribución ahorro/deuda/libre y recomendaciones prácticas para Colombia.</sub>
     </td>
     <td align="center" width="33%">
-      <sub><strong>Nota de privacidad</strong><br />Las capturas fueron tomadas usando el modo local de pruebas para no exponer cuentas ni saldos personales reales.</sub>
+      <img src="docs/screenshots/06_finanzas_diagnostico_ia.png" width="210" alt="Diagnóstico inteligente con Gemini" /><br />
+      <strong>6. Diagnóstico con Gemini</strong><br />
+      <sub>Análisis completo generado por IA sobre los números reales del mes y acciones concretas.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/07_asesor_gemini_ai.png" width="210" alt="Chat Asesor Gemini AI" /><br />
+      <strong>7. Asesor Gemini AI</strong><br />
+      <sub>Chat conversacional con Gemini 3.5 Flash-Lite, preguntas sugeridas y contexto real en COP.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/08_ajustes_cuenta_wallet.png" width="210" alt="Configuración de cuenta, sueldo y Google Wallet" /><br />
+      <strong>8. Ajustes y Google Wallet</strong><br />
+      <sub>Edición de sueldo base e interruptor exclusivo para registrar compras desde Google Wallet.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/09_ajustes_pestanas.png" width="210" alt="Personalización de pestañas visibles y categorías" /><br />
+      <strong>9. Pestañas y Categorías</strong><br />
+      <sub>Configuración de pestañas visibles en la barra inferior y gestión completa de categorías.</sub>
     </td>
   </tr>
 </table>
