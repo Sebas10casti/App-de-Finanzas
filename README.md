@@ -4,11 +4,11 @@
 > Aplicación Android para gestionar el presupuesto mensual ítem a ítem en pesos colombianos (COP), automatizar gastos pagados con Google Wallet, ahorrar en pareja mediante bolsillos compartidos y recibir asesoría financiera personalizada con Gemini AI.
 
 <p align="center">
-  <a href="docs/media/mi_presupuesto_demo.mp4">
-    <img src="docs/media/mi_presupuesto_demo.gif" width="720" alt="Presentación en video de Mi Presupuesto" />
+  <a href="docs/media/mi_presupuesto_presentacion.mp4">
+    <img src="docs/media/mi_presupuesto_presentacion.gif" width="640" alt="Presentación en video de Mi Presupuesto" />
   </a>
   <br />
-  <sub><strong>Vista previa animada</strong> · <a href="docs/media/mi_presupuesto_demo.mp4">Ver / descargar video completo en 1080p con audio (MP4)</a></sub>
+  <sub><strong>Vista previa animada</strong> · <a href="docs/media/mi_presupuesto_presentacion.mp4">Ver / descargar video de presentación en HD con audio (MP4)</a></sub>
 </p>
 
 ---
@@ -132,7 +132,7 @@ A medida que se fue probando en uso real, el proyecto evolucionó iterativamente
 
 ```text
 ├── docs/
-│   ├── media/                                       # Video de presentación (1080p MP4) y vista previa GIF
+│   ├── media/                                       # Video de presentación (HD MP4) y vista previa GIF
 │   └── screenshots/                                 # Capturas de pantalla usadas en este README
 ├── app/
 │   ├── build.gradle.kts
